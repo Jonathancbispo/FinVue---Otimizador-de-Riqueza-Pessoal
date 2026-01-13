@@ -1,0 +1,7 @@
+{
+  "name": "FinVue - Otimizador de Riqueza Pessoal",
+  "description": "Uma aplicação de gestão financeira de alto nível com rastreamento em tempo real, previsões anuais e insights financeiros por IA usando Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
