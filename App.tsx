@@ -38,7 +38,25 @@ import {
   Filter,
   Lock
 } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area, RadialBarChart, RadialBar, Legend } from 'recharts';
+import { 
+  PieChart, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  CartesianGrid, 
+  AreaChart, 
+  Area, 
+  RadialBarChart, 
+  RadialBar, 
+  Legend,
+  Line,
+  ComposedChart
+} from 'recharts';
 import NumberInput from './components/NumberInput';
 import SummaryCard from './components/SummaryCard';
 import ChatBot from './components/ChatBot';
@@ -183,10 +201,13 @@ const App: React.FC = () => {
       const grossIncome = (state.income.fixed[idx] || 0) + (state.income.extra[idx] || 0);
       const netIncome = grossIncome - (state.income.investments[idx] || 0);
       const exp = (state.expenses.fixed[idx] || 0) + (state.expenses.creditCard[idx] || 0) + (state.expenses.monthlyPurchases[idx] || 0) + (state.expenses.butcher[idx] || 0) + (state.expenses.weekly[idx] || 0) + (state.expenses.otherExpenses[idx] || 0);
+      const monthlyBalance = netIncome - exp;
+      
       return { 
         income: netIncome, 
         gross: grossIncome,
         expense: exp, 
+        balance: monthlyBalance,
         invested: state.income.investments[idx] || 0,
         month: MONTHS[idx],
         shortMonth: MONTHS[idx].substring(0, 3) 
@@ -194,22 +215,24 @@ const App: React.FC = () => {
     });
 
     const cumulativeResults = allMonthlyResults.map(m => {
-      runningBalance += (m.income - m.expense);
+      runningBalance += m.balance;
       return { month: m.shortMonth, balance: runningBalance };
     });
 
     const cumulativeInvested = state.income.investments.reduce((a, b) => a + b, 0);
 
-    const monthlyIncome = allMonthlyResults[currentMonthIdx].income;
-    const monthlyExpenses = allMonthlyResults[currentMonthIdx].expense;
-    const monthlyBalance = monthlyIncome - monthlyExpenses;
+    // Cálculos acumulados até o mês selecionado (YTD)
+    const ytdSlice = allMonthlyResults.slice(0, currentMonthIdx + 1);
+    const ytdIncome = ytdSlice.reduce((acc, curr) => acc + curr.income, 0);
+    const ytdExpenses = ytdSlice.reduce((acc, curr) => acc + curr.expense, 0);
+    const ytdBalance = ytdIncome - ytdExpenses;
+    const ytdInvested = ytdSlice.reduce((acc, curr) => acc + curr.invested, 0);
 
     const annualIncome = allMonthlyResults.reduce((acc, curr) => acc + curr.income, 0);
     const annualGross = allMonthlyResults.reduce((acc, curr) => acc + curr.gross, 0);
     const annualExpenses = allMonthlyResults.reduce((acc, curr) => acc + curr.expense, 0);
     const annualBalance = annualIncome - annualExpenses;
 
-    // Filter results based on selectedPeriod
     const periodResults = allMonthlyResults.slice(selectedPeriod.start, selectedPeriod.end + 1);
     const pGross = periodResults.reduce((a, b) => a + b.gross, 0);
     const pIncome = periodResults.reduce((a, b) => a + b.income, 0);
@@ -218,12 +241,12 @@ const App: React.FC = () => {
     const pBalance = pIncome - pExpenses;
 
     const savingsRate = pGross > 0 ? Math.round(((pIncome - pExpenses) / pIncome) * 100) : 0;
-    const rankingMonths = [...periodResults].sort((a, b) => (b.income - b.expense) - (a.income - a.expense));
 
     return { 
-      monthlyIncome, 
-      monthlyExpenses, 
-      monthlyBalance, 
+      ytdIncome, 
+      ytdExpenses, 
+      ytdBalance, 
+      ytdInvested,
       annualIncome, 
       annualGross,
       annualExpenses, 
@@ -233,7 +256,6 @@ const App: React.FC = () => {
       cumulativeInvested,
       pGross, pIncome, pExpenses, pInvested, pBalance,
       savingsRate,
-      rankingMonths,
       periodResults
     };
   }, [state, currentMonthIdx, selectedPeriod]);
@@ -250,6 +272,31 @@ const App: React.FC = () => {
     });
   };
 
+  const handleAiAdvice = async () => {
+    if (loadingAdvice) return;
+    setLoadingAdvice(true);
+    try {
+      const advice = await getFinancialAdvice(state, results as any, currentMonthIdx);
+      setAiAdvice(advice);
+    } catch (error) {
+      console.error("Erro ao obter conselho da IA:", error);
+      setAiAdvice("Mantenha o equilíbrio entre renda e despesas para um futuro sólido.");
+    } finally {
+      setLoadingAdvice(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setSession(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+    }
+  };
+
   const chartData = [
     { name: 'Fixo', value: state.expenses.fixed[currentMonthIdx] },
     { name: 'Cartão', value: state.expenses.creditCard[currentMonthIdx] },
@@ -259,61 +306,8 @@ const App: React.FC = () => {
     { name: 'Outras', value: state.expenses.otherExpenses[currentMonthIdx] },
   ].filter(d => d.value > 0);
 
-  const periodExpensesData = [
-    { name: 'Fixo', value: state.expenses.fixed.slice(selectedPeriod.start, selectedPeriod.end + 1).reduce((a, b) => a + b, 0) },
-    { name: 'Cartão', value: state.expenses.creditCard.slice(selectedPeriod.start, selectedPeriod.end + 1).reduce((a, b) => a + b, 0) },
-    { name: 'Compras', value: state.expenses.monthlyPurchases.slice(selectedPeriod.start, selectedPeriod.end + 1).reduce((a, b) => a + b, 0) },
-    { name: 'Açougue', value: state.expenses.butcher.slice(selectedPeriod.start, selectedPeriod.end + 1).reduce((a, b) => a + b, 0) },
-    { name: 'Semanal', value: state.expenses.weekly.slice(selectedPeriod.start, selectedPeriod.end + 1).reduce((a, b) => a + b, 0) },
-    { name: 'Outras', value: state.expenses.otherExpenses.slice(selectedPeriod.start, selectedPeriod.end + 1).reduce((a, b) => a + b, 0) },
-  ].filter(d => d.value > 0);
-
-  const handleAiAdvice = async () => {
-    setLoadingAdvice(true);
-    const advice = await getFinancialAdvice(state, results, currentMonthIdx);
-    setAiAdvice(advice);
-    setLoadingAdvice(false);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
-  const handleUpdateName = async () => {
-    if (!newDisplayName.trim()) return;
-    setProfileLoading(true);
-    setProfileFeedback(null);
-    try {
-      await updateUserProfile(newDisplayName);
-      setProfileFeedback({ type: 'success', msg: 'Nome atualizado com sucesso!' });
-      const { data: { user } } = await supabase.auth.getUser();
-      setSession((prev: any) => ({ ...prev, user }));
-    } catch (e: any) {
-      setProfileFeedback({ type: 'error', msg: e.message });
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const handleUpdatePassword = async () => {
-    if (newPassword.length < 6) {
-      setProfileFeedback({ type: 'error', msg: 'A senha deve ter pelo menos 6 caracteres.' });
-      return;
-    }
-    setProfileLoading(true);
-    setProfileFeedback(null);
-    try {
-      await updateUserPassword(newPassword);
-      setProfileFeedback({ type: 'success', msg: 'Senha alterada com sucesso!' });
-      setNewPassword('');
-    } catch (e: any) {
-      setProfileFeedback({ type: 'error', msg: e.message });
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
   const formatCurrency = (num: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+  const formatCompact = (num: number) => new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(num);
 
   const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split('@')[0];
 
@@ -412,41 +406,129 @@ const App: React.FC = () => {
             {aiAdvice && <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-[2rem] text-white shadow-xl group relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 group-hover:scale-110 transition-transform"><Sparkles size={100} /></div><div className="relative z-10 flex flex-col space-y-2"><div className="flex items-center space-x-2"><Sparkles size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Dica Estratégica</span></div><p className="text-lg font-medium leading-tight">{aiAdvice}</p></div></div>}
 
             <div className="space-y-4">
-              <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Resumo Mensal • {MONTHS[currentMonthIdx]}</h2>
+              <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Resumo Acumulado (Jan - {MONTHS[currentMonthIdx].substring(0,3)})</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                <SummaryCard title="Renda Líquida" value={results.monthlyIncome} type="income" subtitle="Após Invest." />
-                <SummaryCard title="Despesa Total" value={results.monthlyExpenses} type="expense" />
-                <SummaryCard title="Saldo Livre" value={results.monthlyBalance} type={results.monthlyBalance >= 0 ? 'positive' : 'negative'} />
-                <SummaryCard title="Investido (Ano)" value={results.cumulativeInvested} type="positive" />
-                <SummaryCard title="Patrimônio Est." value={results.cumulativeResults[currentMonthIdx].balance} type="positive" />
+                <SummaryCard title="Renda Líquida Acum." value={results.ytdIncome} type="income" subtitle={`Total até ${MONTHS[currentMonthIdx].substring(0,3)}`} />
+                <SummaryCard title="Despesa Acumulada" value={results.ytdExpenses} type="expense" subtitle={`Total até ${MONTHS[currentMonthIdx].substring(0,3)}`} />
+                <SummaryCard title="Saldo em Caixa" value={results.ytdBalance} type={results.ytdBalance >= 0 ? 'positive' : 'negative'} subtitle="Acumulado" />
+                <SummaryCard title="Investido no Ano" value={results.ytdInvested} type="positive" subtitle={`Até ${MONTHS[currentMonthIdx].substring(0,3)}`} />
+                <SummaryCard title="Patrimônio Est." value={results.cumulativeResults[currentMonthIdx].balance} type="positive" subtitle="Saldo YTD" />
               </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
               <div className="xl:col-span-2 space-y-8">
                 <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm"><BarChart3 className="w-4 h-4 mr-2 text-indigo-500" />Fluxo de Caixa Anual</h3>
-                  <div className="h-[250px] w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={results.allMonthlyResults}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10}} /><Tooltip /><Bar dataKey="income" fill="#6366f1" radius={[4, 4, 0, 0]} /><Bar dataKey="expense" fill="#fbbf24" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center text-sm">
+                      <BarChart3 className="w-4 h-4 mr-2 text-indigo-500" />
+                      Fluxo Mensal vs Lucratividade
+                    </h3>
+                    <div className="flex items-center space-x-3 text-[10px] font-bold uppercase tracking-widest">
+                      <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-indigo-500"></div><span className="text-slate-400">Renda</span></div>
+                      <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div><span className="text-slate-400">Gasto</span></div>
+                      <div className="flex items-center space-x-1"><div className="w-2 h-2 bg-emerald-500"></div><span className="text-slate-400">Saldo</span></div>
+                    </div>
+                  </div>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={results.allMonthlyResults}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis 
+                          dataKey="shortMonth" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fontSize: 10, fontWeight: 700}} 
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tickFormatter={formatCompact} 
+                          tick={{fontSize: 10}}
+                        />
+                        <Tooltip 
+                          cursor={{fill: 'rgba(99, 102, 241, 0.03)'}}
+                          contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                          formatter={(value: any) => formatCurrency(value)}
+                        />
+                        <Bar dataKey="income" radius={[4, 4, 0, 0]} barSize={25}>
+                          {results.allMonthlyResults.map((entry, index) => (
+                            <Cell key={`cell-i-${index}`} fill={index === currentMonthIdx ? '#6366f1' : '#c7d2fe'} />
+                          ))}
+                        </Bar>
+                        <Bar dataKey="expense" radius={[4, 4, 0, 0]} barSize={25}>
+                          {results.allMonthlyResults.map((entry, index) => (
+                            <Cell key={`cell-e-${index}`} fill={index === currentMonthIdx ? '#f59e0b' : '#fde68a'} />
+                          ))}
+                        </Bar>
+                        <Line 
+                          type="monotone" 
+                          dataKey="balance" 
+                          stroke="#10b981" 
+                          strokeWidth={3} 
+                          dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
+                          activeDot={{ r: 6, strokeWidth: 0 }}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
 
                 <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm"><LineIcon className="w-4 h-4 mr-2 text-indigo-500" />Evolução Patrimonial</h3>
-                  <div className="h-[250px] w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={results.cumulativeResults}><defs><linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} /><Tooltip /><Area type="monotone" dataKey="balance" stroke="#6366f1" fillOpacity={1} fill="url(#colorBalance)" /></AreaChart></ResponsiveContainer></div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm">
+                    <LineIcon className="w-4 h-4 mr-2 text-indigo-500" />
+                    Curva Patrimonial Jan - {MONTHS[currentMonthIdx]}
+                  </h3>
+                  <div className="h-[250px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={results.cumulativeResults.slice(0, currentMonthIdx + 1)}>
+                        <defs>
+                          <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15}/>
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                        <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
+                        <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none' }} />
+                        <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
               
               <div className="space-y-8">
                 <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm"><PieIcon className="w-4 h-4 mr-2 text-indigo-500" />Perfil de Gastos</h3>
-                  <div className="h-[220px] w-full">{chartData.length > 0 ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={8} dataKey="value">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer> : <div className="flex items-center justify-center h-full opacity-20"><LayoutDashboard size={40} /></div>}</div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm">
+                    <PieIcon className="w-4 h-4 mr-2 text-indigo-500" />
+                    Gastos do Mês de {MONTHS[currentMonthIdx]}
+                  </h3>
+                  <div className="h-[220px] w-full">
+                    {chartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={8} dataKey="value" stroke="none">
+                            {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full opacity-20">
+                        <LayoutDashboard size={40} className="mb-2" />
+                        <p className="text-[10px] font-bold uppercase">Sem gastos</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Métricas Anuais</h3>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Meta Anual (Total 12 meses)</h3>
                   <div className="space-y-4">
-                    <div><p className="text-[10px] text-slate-500 uppercase font-bold">Renda Acumulada</p><p className="text-xl font-bold">{formatCurrency(results.annualIncome)}</p></div>
-                    <div><p className="text-[10px] text-slate-500 uppercase font-bold">Despesa Acumulada</p><p className="text-xl font-bold text-amber-400">{formatCurrency(results.annualExpenses)}</p></div>
-                    <div className="pt-4 border-t border-white/10"><p className="text-[10px] text-indigo-400 uppercase font-bold">Líquido do Ano</p><p className={`text-2xl font-black ${results.annualBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(results.annualBalance)}</p></div>
+                    <div><p className="text-[10px] text-slate-500 uppercase font-bold">Expectativa Bruta</p><p className="text-xl font-bold">{formatCurrency(results.annualGross)}</p></div>
+                    <div><p className="text-[10px] text-slate-500 uppercase font-bold">Gasto Total Previsto</p><p className="text-xl font-bold text-amber-400">{formatCurrency(results.annualExpenses)}</p></div>
+                    <div className="pt-4 border-t border-white/10"><p className="text-[10px] text-indigo-400 uppercase font-bold">Projeção Final</p><p className={`text-2xl font-black ${results.annualBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(results.annualBalance)}</p></div>
                   </div>
                 </div>
               </div>
@@ -474,62 +556,19 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Period Specific Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-               <div className="bg-white dark:bg-darkCard p-6 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder shadow-sm relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 text-emerald-500/10 -rotate-12 group-hover:scale-110 transition-transform"><ArrowUpRight size={80} /></div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Renda no Período</p>
-                  <p className="text-3xl font-black text-slate-900 dark:text-white">{formatCurrency(results.pGross)}</p>
-                  <div className="mt-4 flex items-center space-x-2 text-[10px] font-bold text-emerald-500">
-                     <TrendingUp size={14} />
-                     <span>Meta: {formatCurrency(results.annualGross / 12 * (selectedPeriod.end - selectedPeriod.start + 1))}</span>
-                  </div>
-               </div>
-               <div className="bg-white dark:bg-darkCard p-6 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder shadow-sm relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 text-amber-500/10 -rotate-12 group-hover:scale-110 transition-transform"><ArrowDownRight size={80} /></div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Gasto no Período</p>
-                  <p className="text-3xl font-black text-slate-900 dark:text-white">{formatCurrency(results.pExpenses)}</p>
-                  <div className="mt-4 flex items-center space-x-2 text-[10px] font-bold text-slate-400">
-                     <Activity size={14} />
-                     <span>Méd. Mensal: {formatCurrency(results.pExpenses / (selectedPeriod.end - selectedPeriod.start + 1))}</span>
-                  </div>
-               </div>
-               <div className="bg-white dark:bg-darkCard p-6 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder shadow-sm relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 text-indigo-500/10 -rotate-12 group-hover:scale-110 transition-transform"><Target size={80} /></div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Investimentos</p>
-                  <p className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(results.pInvested)}</p>
-                  <div className="mt-4 flex items-center space-x-2 text-[10px] font-bold text-indigo-500">
-                     <Award size={14} />
-                     <span>Foco: {Math.round((results.pInvested / results.pGross) * 100)}% da Renda</span>
-                  </div>
-               </div>
-               <div className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 text-white/5 -rotate-12 group-hover:scale-110 transition-transform"><Zap size={80} /></div>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Saldo Final</p>
-                  <p className={`text-3xl font-black ${results.pBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(results.pBalance)}</p>
-                  <div className="mt-4 flex items-center space-x-2 text-[10px] font-bold text-white/60">
-                     <Activity size={14} />
-                     <span>{selectedPeriod.label}</span>
-                  </div>
-               </div>
+               <SummaryCard title="Renda no Período" value={results.pGross} type="income" subtitle={selectedPeriod.label} />
+               <SummaryCard title="Gasto no Período" value={results.pExpenses} type="expense" subtitle={selectedPeriod.label} />
+               <SummaryCard title="Investido" value={results.pInvested} type="positive" subtitle={selectedPeriod.label} />
+               <SummaryCard title="Saldo Final" value={results.pBalance} type={results.pBalance >= 0 ? 'positive' : 'negative'} subtitle={selectedPeriod.label} />
             </div>
 
-            {/* Charts Section for Period */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                <div className="lg:col-span-1 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col items-center text-center">
                   <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Eficiência do Período</h3>
                   <div className="h-64 w-full relative">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RadialBarChart 
-                        cx="50%" 
-                        cy="50%" 
-                        innerRadius="60%" 
-                        outerRadius="100%" 
-                        barSize={15} 
-                        data={[{ name: 'Eficiência', value: results.savingsRate, fill: results.savingsRate >= 20 ? '#10b981' : results.savingsRate >= 0 ? '#6366f1' : '#ef4444' }]} 
-                        startAngle={180} 
-                        endAngle={0}
-                      >
+                      <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={15} data={[{ name: 'Eficiência', value: results.savingsRate, fill: results.savingsRate >= 20 ? '#10b981' : results.savingsRate >= 0 ? '#6366f1' : '#ef4444' }]} startAngle={180} endAngle={0}>
                         <RadialBar background dataKey="value" cornerRadius={10} />
                       </RadialBarChart>
                     </ResponsiveContainer>
@@ -538,20 +577,10 @@ const App: React.FC = () => {
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Saving Rate</p>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-[200px]">
-                    Sua eficiência em {selectedPeriod.label}.
-                  </p>
-                  <div className="mt-8 flex items-center space-x-2 text-xs font-black uppercase text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-6 py-3 rounded-2xl">
-                    <Trophy size={16} />
-                    <span>Média Anual: {Math.round((results.annualBalance / results.annualIncome) * 100)}%</span>
-                  </div>
                </div>
 
                <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center">
-                    <BarChart3 size={18} className="mr-3 text-indigo-500" />
-                    Fluxo de Caixa: {selectedPeriod.label}
-                  </h3>
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center"><BarChart3 size={18} className="mr-3 text-indigo-500" />Fluxo: {selectedPeriod.label}</h3>
                   <div className="h-[250px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={results.periodResults}>
@@ -562,26 +591,6 @@ const App: React.FC = () => {
                         <Bar dataKey="expense" fill="#fbbf24" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
-                  <div className="mt-12 p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-darkBorder">
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Composição de Gastos do Período</h4>
-                    <div className="h-4 w-full bg-slate-200 dark:bg-darkCard rounded-full overflow-hidden flex shadow-inner">
-                      {periodExpensesData.map((d, idx) => (
-                        <div 
-                          key={d.name} 
-                          title={`${d.name}: ${formatCurrency(d.value)}`}
-                          style={{ width: `${(d.value / results.pExpenses) * 100}%`, backgroundColor: COLORS[idx % COLORS.length] }} 
-                        />
-                      ))}
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-4">
-                       {periodExpensesData.map((d, idx) => (
-                         <div key={d.name} className="flex items-center space-x-2">
-                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></div>
-                           <span className="text-[9px] font-bold text-slate-500 uppercase">{d.name} ({Math.round((d.value / results.pExpenses) * 100)}%)</span>
-                         </div>
-                       ))}
-                    </div>
                   </div>
                </div>
             </div>
@@ -603,23 +612,17 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
               <div className="xl:col-span-8 space-y-8">
                 <MarketIntelligence newsHeadlines={newsHeadlines} userId={session?.user?.id} />
-                
                 <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
                   <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
-                    <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center shrink-0">
-                      <Trophy size={32} />
-                    </div>
+                    <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center shrink-0"><Trophy size={32} /></div>
                     <div>
                       <h3 className="text-xl font-black mb-2 uppercase tracking-widest">Estratégia de Longo Prazo</h3>
-                      <p className="text-sm text-indigo-100 leading-relaxed">
-                        Baseado no seu perfil de gastos e nas tendências globais, a IA sugere uma alocação de {Math.round((results.cumulativeInvested / (results.annualIncome || 1)) * 100)}% em ativos de proteção para este semestre. Continue monitorando o Pulso Econômico para ajustes finos.
-                      </p>
+                      <p className="text-sm text-indigo-100 leading-relaxed">Continue investindo na sua educação financeira. O retorno sobre o conhecimento é o maior que existe.</p>
                     </div>
                   </div>
                 </div>
               </div>
-
               <div className="xl:col-span-4 sticky top-24">
                 <EconomicNews onNewsLoaded={setNewsHeadlines} />
               </div>
@@ -633,128 +636,17 @@ const App: React.FC = () => {
               <div className="h-48 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-800 relative">
                  <div className="absolute -bottom-16 left-8">
                     <div className="w-32 h-32 rounded-[2.5rem] bg-white dark:bg-darkCard p-2 shadow-2xl border border-white/20">
-                       <div className="w-full h-full bg-slate-100 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                          <User size={64} />
-                       </div>
+                       <div className="w-full h-full bg-slate-100 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center text-indigo-600 dark:text-indigo-400"><User size={64} /></div>
                     </div>
                  </div>
-                 <div className="absolute bottom-4 right-8 text-white/60 text-[10px] font-bold uppercase tracking-widest">
-                    Membro desde {new Date(session?.user?.created_at).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                 </div>
               </div>
-
               <div className="pt-20 px-8 pb-10">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                   <div>
-                    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                       {displayName}
-                    </h2>
-                    <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                       <Mail size={16} />
-                       <span>{session?.user?.email}</span>
-                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{displayName}</h2>
+                    <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400 mt-1 font-medium"><Mail size={16} /><span>{session?.user?.email}</span></div>
                   </div>
-                  <button 
-                    onClick={handleLogout}
-                    className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-6 py-3 rounded-2xl font-bold transition-all hover:bg-rose-100 dark:hover:bg-rose-900/30 active:scale-95 border border-rose-100 dark:border-rose-900/30"
-                  >
-                    <LogOut size={18} />
-                    <span>Encerrar Sessão</span>
-                  </button>
-                </div>
-
-                {profileFeedback && (
-                  <div className={`mt-8 p-4 rounded-2xl flex items-center space-x-3 text-xs font-bold border transition-all animate-in zoom-in-95 ${
-                    profileFeedback.type === 'success' 
-                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' 
-                      : 'bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800 text-rose-600 dark:text-rose-400'
-                  }`}>
-                    {profileFeedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                    <p>{profileFeedback.msg}</p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-                   <div className="space-y-6">
-                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-darkBorder pb-2 flex items-center">
-                         <User size={14} className="mr-2" /> 
-                         Configurações de Perfil
-                      </h3>
-                      <div className="space-y-4">
-                         <div className="flex flex-col space-y-2">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Nome de Exibição</label>
-                            <div className="relative group">
-                               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                               <input 
-                                  type="text" 
-                                  value={newDisplayName}
-                                  onChange={(e) => setNewDisplayName(e.target.value)}
-                                  placeholder="Como devemos te chamar?"
-                                  className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-darkBorder rounded-2xl py-3.5 pl-11 pr-4 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 text-sm font-medium transition-all"
-                               />
-                            </div>
-                            <button 
-                               onClick={handleUpdateName}
-                               disabled={profileLoading || !newDisplayName.trim()}
-                               className="mt-2 w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl font-bold text-xs transition-all shadow-lg shadow-indigo-500/10 disabled:opacity-50"
-                            >
-                               {profileLoading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                               <span>Salvar Alterações</span>
-                            </button>
-                         </div>
-
-                         <div className="flex flex-col space-y-2 pt-4 border-t border-slate-100 dark:border-darkBorder">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Alterar Senha</label>
-                            <div className="relative group">
-                               <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                               <input 
-                                  type="password" 
-                                  value={newPassword}
-                                  onChange={(e) => setNewPassword(e.target.value)}
-                                  placeholder="Nova senha (mín. 6 caracteres)"
-                                  className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-darkBorder rounded-2xl py-3.5 pl-11 pr-4 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 text-sm font-medium transition-all"
-                               />
-                            </div>
-                            <button 
-                               onClick={handleUpdatePassword}
-                               disabled={profileLoading || newPassword.length < 6}
-                               className="mt-2 w-full flex items-center justify-center space-x-2 bg-slate-900 hover:bg-black text-white py-3 rounded-2xl font-bold text-xs transition-all shadow-lg disabled:opacity-50"
-                            >
-                               {profileLoading ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
-                               <span>Atualizar Senha</span>
-                            </button>
-                         </div>
-                      </div>
-                   </div>
-
-                   <div className="space-y-6">
-                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-darkBorder pb-2 flex items-center">
-                         <Activity size={14} className="mr-2" /> 
-                         Status de Uso
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4">
-                         <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400 mb-1">Mês Atual</p>
-                            <p className="text-xl font-black text-indigo-700 dark:text-indigo-300">{results.allMonthlyResults[currentMonthIdx].shortMonth}</p>
-                         </div>
-                         <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-1">Lançamentos</p>
-                            <p className="text-xl font-black text-emerald-700 dark:text-emerald-300">Ano Ativo</p>
-                         </div>
-                      </div>
-                      <div className="p-6 bg-slate-900 rounded-[2rem] text-white">
-                         <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-2">
-                               <Sparkles size={16} className="text-indigo-400" />
-                               <span className="text-[10px] font-black uppercase tracking-widest">Cloud Sync</span>
-                            </div>
-                            <span className="text-[10px] font-bold text-slate-500">Versão 3.4.0</span>
-                         </div>
-                         <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                            Seus dados financeiros estão criptografados e sincronizados com segurança no Supabase Cloud Engine.
-                         </p>
-                      </div>
-                   </div>
+                  <button onClick={handleLogout} className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-6 py-3 rounded-2xl font-bold transition-all hover:bg-rose-100 dark:hover:bg-rose-900/30 border border-rose-100 dark:border-rose-900/30"><LogOut size={18} /><span>Sair</span></button>
                 </div>
               </div>
             </div>
