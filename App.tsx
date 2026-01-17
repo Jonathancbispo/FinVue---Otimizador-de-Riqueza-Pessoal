@@ -90,6 +90,7 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   
   const [currentMonthIdx, setCurrentMonthIdx] = useState(new Date().getMonth());
   const [activeTab, setActiveTab] = useState<'inputs' | 'dashboard' | 'strategy' | 'profile' | 'annual'>('dashboard');
@@ -103,12 +104,6 @@ const App: React.FC = () => {
   
   const monthScrollRef = useRef<HTMLDivElement>(null);
   const monthRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  // Profile management states
-  const [newDisplayName, setNewDisplayName] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileFeedback, setProfileFeedback] = useState<{type: 'success' | 'error', msg: string} | null>(null);
 
   const [state, setState] = useState<FinancialState>(() => {
     const createEmptyYear = () => Array(12).fill(0);
@@ -126,17 +121,11 @@ const App: React.FC = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsAuthenticated(!!session);
-      if (session?.user?.user_metadata?.display_name) {
-        setNewDisplayName(session.user.user_metadata.display_name);
-      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setIsAuthenticated(!!session);
-      if (session?.user?.user_metadata?.display_name) {
-        setNewDisplayName(session.user.user_metadata.display_name);
-      }
     });
 
     return () => subscription.unsubscribe();
@@ -152,6 +141,7 @@ const App: React.FC = () => {
           if (cloudData) {
             setState(cloudData);
           }
+          setDataLoaded(true);
         } catch (error) {
           console.error("Erro ao carregar dados do Supabase:", error);
         } finally {
@@ -159,22 +149,24 @@ const App: React.FC = () => {
         }
       };
       fetchData();
+    } else {
+      setDataLoaded(false);
     }
   }, [isAuthenticated, session]);
 
-  // Auto-save to Supabase
+  // Auto-save to Supabase with debounce and load safety
   useEffect(() => {
-    if (isAuthenticated && session?.user?.id) {
+    if (isAuthenticated && session?.user?.id && dataLoaded) {
       const timeoutId = setTimeout(async () => {
         try {
           await saveFinancialData(session.user.id, state);
-        } catch (error) {
-          console.error("Falha ao sincronizar:", error);
+        } catch (error: any) {
+          console.error("Falha ao sincronizar:", error.message || error);
         }
       }, 2000); 
       return () => clearTimeout(timeoutId);
     }
-  }, [state, isAuthenticated, session]);
+  }, [state, isAuthenticated, session, dataLoaded]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -219,15 +211,6 @@ const App: React.FC = () => {
       return { month: m.shortMonth, balance: runningBalance };
     });
 
-    const cumulativeInvested = state.income.investments.reduce((a, b) => a + b, 0);
-
-    // Cálculos acumulados até o mês selecionado (YTD)
-    const ytdSlice = allMonthlyResults.slice(0, currentMonthIdx + 1);
-    const ytdIncome = ytdSlice.reduce((acc, curr) => acc + curr.income, 0);
-    const ytdExpenses = ytdSlice.reduce((acc, curr) => acc + curr.expense, 0);
-    const ytdBalance = ytdIncome - ytdExpenses;
-    const ytdInvested = ytdSlice.reduce((acc, curr) => acc + curr.invested, 0);
-
     const annualIncome = allMonthlyResults.reduce((acc, curr) => acc + curr.income, 0);
     const annualGross = allMonthlyResults.reduce((acc, curr) => acc + curr.gross, 0);
     const annualExpenses = allMonthlyResults.reduce((acc, curr) => acc + curr.expense, 0);
@@ -243,22 +226,17 @@ const App: React.FC = () => {
     const savingsRate = pGross > 0 ? Math.round(((pIncome - pExpenses) / pIncome) * 100) : 0;
 
     return { 
-      ytdIncome, 
-      ytdExpenses, 
-      ytdBalance, 
-      ytdInvested,
       annualIncome, 
       annualGross,
       annualExpenses, 
       annualBalance, 
       allMonthlyResults, 
       cumulativeResults, 
-      cumulativeInvested,
       pGross, pIncome, pExpenses, pInvested, pBalance,
       savingsRate,
       periodResults
     };
-  }, [state, currentMonthIdx, selectedPeriod]);
+  }, [state, selectedPeriod]);
 
   const updateField = (category: 'income' | 'expenses', field: string, value: number) => {
     setState(prev => {
@@ -288,8 +266,7 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await supabase.auth.signOut();
       setSession(null);
       setIsAuthenticated(false);
     } catch (error) {
@@ -351,11 +328,7 @@ const App: React.FC = () => {
                     <span className="hidden sm:inline">{loadingAdvice ? 'Gerando...' : 'IA Insight'}</span>
                   </button>
                   <div className="h-8 w-px bg-slate-200 dark:bg-darkBorder mx-2 hidden sm:block"></div>
-                  <button 
-                    onClick={() => setActiveTab('profile')} 
-                    className={`p-2 rounded-full transition-all ${activeTab === 'profile' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                    title="Meu Perfil"
-                  >
+                  <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-full transition-all ${activeTab === 'profile' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`} title="Meu Perfil">
                     <User size={22} />
                   </button>
                   <button onClick={handleLogout} className="flex items-center space-x-2 p-2 rounded-full hover:bg-rose-50 dark:hover:bg-rose-900/20 text-slate-400 hover:text-rose-600 transition-all" title="Sair"><LogOut size={20} /></button>
@@ -370,7 +343,6 @@ const App: React.FC = () => {
                 {MONTHS.map((month, idx) => (
                   <button 
                     key={month} 
-                    // Wrap assignment in curly braces to ensure the function returns void.
                     ref={el => { monthRefs.current[idx] = el; }} 
                     onClick={() => setCurrentMonthIdx(idx)} 
                     className={`py-4 px-5 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2 ${currentMonthIdx === idx ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-900/20' : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
@@ -412,19 +384,18 @@ const App: React.FC = () => {
                 {aiAdvice && <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-[2rem] text-white shadow-xl group relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 group-hover:scale-110 transition-transform"><Sparkles size={100} /></div><div className="relative z-10 flex flex-col space-y-2"><div className="flex items-center space-x-2"><Sparkles size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Dica Estratégica</span></div><p className="text-lg font-medium leading-tight">{aiAdvice}</p></div></div>}
 
                 <div className="space-y-4">
-                  <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Resumo Acumulado (Jan - {MONTHS[currentMonthIdx].substring(0,3)})</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                    <SummaryCard title="Renda Líquida Acum." value={results.ytdIncome} type="income" subtitle={`Total até ${MONTHS[currentMonthIdx].substring(0,3)}`} />
-                    <SummaryCard title="Despesa Acumulada" value={results.ytdExpenses} type="expense" subtitle={`Total até ${MONTHS[currentMonthIdx].substring(0,3)}`} />
-                    <SummaryCard title="Saldo em Caixa" value={results.ytdBalance} type={results.ytdBalance >= 0 ? 'positive' : 'negative'} subtitle="Acumulado" />
-                    <SummaryCard title="Investido no Ano" value={results.ytdInvested} type="positive" subtitle={`Até ${MONTHS[currentMonthIdx].substring(0,3)}`} />
-                    <SummaryCard title="Patrimônio Est." value={results.cumulativeResults[currentMonthIdx].balance} type="positive" subtitle="Saldo YTD" />
+                  <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Resumo de {MONTHS[currentMonthIdx]}</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <SummaryCard title="Renda Líquida" value={results.allMonthlyResults[currentMonthIdx].income} type="income" subtitle={MONTHS[currentMonthIdx]} />
+                    <SummaryCard title="Despesa Total" value={results.allMonthlyResults[currentMonthIdx].expense} type="expense" subtitle={MONTHS[currentMonthIdx]} />
+                    <SummaryCard title="Saldo do Mês" value={results.allMonthlyResults[currentMonthIdx].balance} type={results.allMonthlyResults[currentMonthIdx].balance >= 0 ? 'positive' : 'negative'} subtitle={MONTHS[currentMonthIdx]} />
+                    <SummaryCard title="Valor Investido" value={results.allMonthlyResults[currentMonthIdx].invested} type="positive" subtitle={MONTHS[currentMonthIdx]} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                   <div className="xl:col-span-2 space-y-8">
-                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
+                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
                       <div className="flex items-center justify-between mb-6">
                         <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center text-sm">
                           <BarChart3 className="w-4 h-4 mr-2 text-indigo-500" />
@@ -436,27 +407,13 @@ const App: React.FC = () => {
                           <div className="flex items-center space-x-1"><div className="w-2 h-2 bg-emerald-500"></div><span className="text-slate-400">Saldo</span></div>
                         </div>
                       </div>
-                      <div className="h-[300px] w-full">
+                      <div className="w-full flex-grow min-h-[300px] h-[35vh] max-h-[500px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <ComposedChart data={results.allMonthlyResults}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis 
-                              dataKey="shortMonth" 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tick={{fontSize: 10, fontWeight: 700}} 
-                            />
-                            <YAxis 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tickFormatter={formatCompact} 
-                              tick={{fontSize: 10}}
-                            />
-                            <Tooltip 
-                              cursor={{fill: 'rgba(99, 102, 241, 0.03)'}}
-                              contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                              formatter={(value: any) => formatCurrency(value)}
-                            />
+                            <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+                            <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
+                            <Tooltip cursor={{fill: 'rgba(99, 102, 241, 0.03)'}} contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }} formatter={(value: any) => formatCurrency(value)} />
                             <Bar dataKey="income" radius={[4, 4, 0, 0]} barSize={25}>
                               {results.allMonthlyResults.map((entry, index) => (
                                 <Cell key={`cell-i-${index}`} fill={index === currentMonthIdx ? '#6366f1' : '#c7d2fe'} />
@@ -467,25 +424,18 @@ const App: React.FC = () => {
                                 <Cell key={`cell-e-${index}`} fill={index === currentMonthIdx ? '#f59e0b' : '#fde68a'} />
                               ))}
                             </Bar>
-                            <Line 
-                              type="monotone" 
-                              dataKey="balance" 
-                              stroke="#10b981" 
-                              strokeWidth={3} 
-                              dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
-                              activeDot={{ r: 6, strokeWidth: 0 }}
-                            />
+                            <Line type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       </div>
                     </div>
 
-                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
+                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
                       <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm">
                         <LineIcon className="w-4 h-4 mr-2 text-indigo-500" />
                         Curva Patrimonial Jan - {MONTHS[currentMonthIdx]}
                       </h3>
-                      <div className="h-[250px] w-full">
+                      <div className="w-full flex-grow min-h-[250px] h-[30vh] max-h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={results.cumulativeResults.slice(0, currentMonthIdx + 1)}>
                             <defs>
@@ -505,12 +455,12 @@ const App: React.FC = () => {
                   </div>
                   
                   <div className="space-y-8">
-                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
+                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
                       <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm">
                         <PieIcon className="w-4 h-4 mr-2 text-indigo-500" />
                         Gastos do Mês de {MONTHS[currentMonthIdx]}
                       </h3>
-                      <div className="h-[220px] w-full">
+                      <div className="w-full h-[220px]">
                         {chartData.length > 0 ? (
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -551,11 +501,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="bg-white dark:bg-darkCard p-1 rounded-2xl border border-slate-200 dark:border-darkBorder flex items-center shadow-sm overflow-hidden">
                     {PERIOD_OPTIONS.map((period) => (
-                       <button 
-                        key={period.label}
-                        onClick={() => setSelectedPeriod(period)}
-                        className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl ${selectedPeriod.label === period.label ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                       >
+                       <button key={period.label} onClick={() => setSelectedPeriod(period)} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl ${selectedPeriod.label === period.label ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>
                         {period.label}
                        </button>
                     ))}
@@ -572,7 +518,7 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                    <div className="lg:col-span-1 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col items-center text-center">
                       <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Eficiência do Período</h3>
-                      <div className="h-64 w-full relative">
+                      <div className="w-full aspect-square relative max-w-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={15} data={[{ name: 'Eficiência', value: results.savingsRate, fill: results.savingsRate >= 20 ? '#10b981' : results.savingsRate >= 0 ? '#6366f1' : '#ef4444' }]} startAngle={180} endAngle={0}>
                             <RadialBar background dataKey="value" cornerRadius={10} />
@@ -585,9 +531,9 @@ const App: React.FC = () => {
                       </div>
                    </div>
 
-                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm">
+                   <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
                       <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center"><BarChart3 size={18} className="mr-3 text-indigo-500" />Fluxo: {selectedPeriod.label}</h3>
-                      <div className="h-[250px] w-full">
+                      <div className="w-full flex-grow min-h-[250px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={results.periodResults}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -606,28 +552,12 @@ const App: React.FC = () => {
             {activeTab === 'strategy' && (
               <div className="space-y-8 animate-fade-in">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Centro de Inteligência Global</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Análise macroeconômica e previsões estratégicas alimentadas por IA.</p>
-                  </div>
-                  <div className="bg-white dark:bg-darkCard p-2 rounded-2xl border border-slate-200 dark:border-darkBorder flex items-center space-x-4">
-                     <CurrencyTicker />
-                  </div>
+                  <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Centro de Inteligência Global</h2>
+                  <CurrencyTicker />
                 </div>
-
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
                   <div className="xl:col-span-8 space-y-8">
                     <MarketIntelligence newsHeadlines={newsHeadlines} userId={session?.user?.id} />
-                    <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
-                      <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
-                        <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center shrink-0"><Trophy size={32} /></div>
-                        <div>
-                          <h3 className="text-xl font-black mb-2 uppercase tracking-widest">Estratégia de Longo Prazo</h3>
-                          <p className="text-sm text-indigo-100 leading-relaxed">Continue investindo na sua educação financeira. O retorno sobre o conhecimento é o maior que existe.</p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                   <div className="xl:col-span-4 sticky top-24">
                     <EconomicNews onNewsLoaded={setNewsHeadlines} />

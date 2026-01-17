@@ -16,7 +16,15 @@ export const saveFinancialData = async (userId: string, data: any) => {
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id,year' });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Supabase Error Details:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
+    });
+    throw error;
+  }
 };
 
 export const loadFinancialData = async (userId: string) => {
@@ -25,9 +33,12 @@ export const loadFinancialData = async (userId: string) => {
     .select('data')
     .eq('user_id', userId)
     .eq('year', new Date().getFullYear())
-    .single();
+    .maybeSingle(); // Usando maybeSingle para evitar erro PGRST116 quando não há dados
 
-  if (error && error.code !== 'PGRST116') return null;
+  if (error) {
+    console.error("Load Error:", error);
+    return null;
+  }
   return data?.data || null;
 };
 
