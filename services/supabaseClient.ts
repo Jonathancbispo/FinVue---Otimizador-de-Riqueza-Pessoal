@@ -10,13 +10,11 @@ const handleError = (error: any, context: string) => {
   const message = error?.message || 'Erro desconhecido';
   const code = error?.code || 'N/A';
   console.error(`[Supabase ${context}] Code: ${code} - Message: ${message}`);
-  // PGRST205 é comumente falta de índice único para upsert
   return { message, code, full: error };
 };
 
 export const saveFinancialData = async (userId: string, data: any) => {
-  // Importante: Para o upsert funcionar, a tabela financial_data DEVE ter 
-  // um UNIQUE INDEX nas colunas (user_id, year).
+  // O upsert depende do UNIQUE INDEX (user_id, year) no SQL
   const { error } = await supabase
     .from('financial_data')
     .upsert(
@@ -29,10 +27,7 @@ export const saveFinancialData = async (userId: string, data: any) => {
       { onConflict: 'user_id,year' }
     );
 
-  if (error) {
-    const handled = handleError(error, 'Save');
-    throw handled;
-  }
+  if (error) throw handleError(error, 'SaveFinancialData');
 };
 
 export const loadFinancialData = async (userId: string) => {
@@ -47,7 +42,7 @@ export const loadFinancialData = async (userId: string) => {
     if (error) throw error;
     return data?.data || null;
   } catch (err) {
-    throw handleError(err, 'Load');
+    throw handleError(err, 'LoadFinancialData');
   }
 };
 
@@ -61,7 +56,7 @@ export const saveGeneratedAsset = async (userId: string, prompt: string, imageUr
       category
     });
   
-  if (error) throw handleError(error, 'Asset Save');
+  if (error) throw handleError(error, 'SaveAsset');
 };
 
 export const getUserAssets = async (userId: string) => {
@@ -71,7 +66,7 @@ export const getUserAssets = async (userId: string) => {
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  if (error) throw handleError(error, 'Asset Load');
+  if (error) throw handleError(error, 'GetUserAssets');
   return data || [];
 };
 

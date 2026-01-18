@@ -5,7 +5,7 @@ import {
   PieChart as PieIcon, BarChart3, PlusCircle, LayoutDashboard, Moon, Sun,
   Target, Trophy, LineChart as LineIcon, BrainCircuit, LogOut, RefreshCw,
   Receipt, User, Mail, Database, History, ImageIcon, Loader2, Copy, CheckCircle2,
-  CalendarDays, Activity, AlertCircle, ChevronRight
+  CalendarDays, Activity, AlertCircle, ChevronRight, Cloud
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, 
@@ -58,9 +58,6 @@ const App: React.FC = () => {
     expenses: { fixed: createEmptyYear(), creditCard: createEmptyYear(), monthlyPurchases: createEmptyYear(), butcher: createEmptyYear(), weekly: createEmptyYear(), otherExpenses: createEmptyYear() }
   });
 
-  const [aiAdvice, setAiAdvice] = useState<string>('');
-  const [loadingAdvice, setLoadingAdvice] = useState<boolean>(false);
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -69,6 +66,13 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setIsAuthenticated(!!session);
+      if (!session) {
+        setDataLoaded(false);
+        setState({
+          income: { fixed: createEmptyYear(), extra: createEmptyYear(), investments: createEmptyYear() },
+          expenses: { fixed: createEmptyYear(), creditCard: createEmptyYear(), monthlyPurchases: createEmptyYear(), butcher: createEmptyYear(), weekly: createEmptyYear(), otherExpenses: createEmptyYear() }
+        });
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -110,12 +114,18 @@ const App: React.FC = () => {
     if (isAuthenticated && session?.user?.id) fetchData(session.user.id);
   }, [isAuthenticated, session, fetchData]);
 
+  // Efeito de Salvamento Automático (Debounce)
   useEffect(() => {
     if (isAuthenticated && session?.user?.id && dataLoaded && !setupRequired) {
-      const timer = setTimeout(() => {
-        saveFinancialData(session.user.id, state).catch(err => {
+      const timer = setTimeout(async () => {
+        setIsSyncing(true);
+        try {
+          await saveFinancialData(session.user.id, state);
+        } catch (err: any) {
           if (err.code === 'PGRST205') setSetupRequired(true);
-        });
+        } finally {
+          setIsSyncing(false);
+        }
       }, 3000);
       return () => clearTimeout(timer);
     }
@@ -136,11 +146,6 @@ const App: React.FC = () => {
       return { income, gross, expense, balance, invested: state.income.investments[idx] || 0, month: MONTHS[idx], shortMonth: MONTHS[idx].substring(0, 3) };
     });
 
-    const cumulativeResults = allMonthlyResults.map(m => {
-      runningBalance += m.balance;
-      return { month: m.shortMonth, balance: runningBalance };
-    });
-
     const periodResults = allMonthlyResults.slice(selectedPeriod.start, selectedPeriod.end + 1);
     const pGross = periodResults.reduce((a, b) => a + b.gross, 0);
     const pIncome = periodResults.reduce((a, b) => a + b.income, 0);
@@ -152,7 +157,7 @@ const App: React.FC = () => {
       annualGross: allMonthlyResults.reduce((a, b) => a + b.gross, 0),
       annualExpenses: allMonthlyResults.reduce((a, b) => a + b.expense, 0),
       annualBalance: allMonthlyResults.reduce((a, b) => a + b.balance, 0),
-      allMonthlyResults, cumulativeResults, pGross, pIncome, pExpenses, pInvested, pBalance,
+      allMonthlyResults, pGross, pIncome, pExpenses, pInvested, pBalance,
       savingsRate: pGross > 0 ? Math.round((pBalance / pIncome) * 100) : 0,
       periodResults
     } as any;
@@ -164,6 +169,12 @@ const App: React.FC = () => {
       newState[cat][field][currentMonthIdx] = val;
       return newState;
     });
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setSession(null);
   };
 
   const copySQL = () => {
@@ -185,8 +196,23 @@ const App: React.FC = () => {
               <div className="bg-indigo-600 p-2 rounded-lg shadow-lg shadow-indigo-200 dark:shadow-none"><TrendingUp className="w-5 h-5 text-white" /></div>
               <h1 className="text-xl font-bold dark:text-white tracking-tight">FinVue<span className="text-indigo-600">.</span></h1>
             </div>
+            
             <div className="flex items-center space-x-3">
-              {isSyncing && <RefreshCw size={14} className="animate-spin text-indigo-500 mr-2" />}
+              {/* Indicador de Nuvem/Sincronização */}
+              <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase transition-all ${isSyncing ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20' : 'bg-slate-50 text-slate-400 dark:bg-slate-800/30'}`}>
+                {isSyncing ? (
+                  <>
+                    <RefreshCw size={12} className="animate-spin" />
+                    <span className="animate-pulse">Sincronizando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Cloud size={12} />
+                    <span>Nuvem Ativa</span>
+                  </>
+                )}
+              </div>
+
               <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
                 {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
               </button>
@@ -367,8 +393,22 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {activeTab === 'strategy' && <MarketIntelligence newsHeadlines={newsHeadlines} userId={session?.user?.id} />}
-            {activeTab === 'profile' && <ProfileSettings initialName={displayName} email={session?.user?.email} />}
+            {activeTab === 'strategy' && (
+              <MarketIntelligence 
+                newsHeadlines={newsHeadlines} 
+                userId={session?.user?.id} 
+                history={generatedAssets} 
+                onAssetGenerated={(newAsset) => setGeneratedAssets([newAsset, ...generatedAssets])}
+              />
+            )}
+            
+            {activeTab === 'profile' && (
+              <ProfileSettings 
+                initialName={displayName} 
+                email={session?.user?.email} 
+                onLogout={handleLogout}
+              />
+            )}
           </main>
 
           <ChatBot financialData={state} />

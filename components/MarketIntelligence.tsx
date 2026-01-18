@@ -13,7 +13,9 @@ import {
   AlertTriangle,
   RefreshCcw,
   FastForward,
-  Info
+  Info,
+  History as HistoryIcon,
+  Download
 } from 'lucide-react';
 import { getMarketIntelligence } from '../services/geminiService';
 import { GoogleGenAI } from "@google/genai";
@@ -35,7 +37,14 @@ interface MarketData {
   drivers: string[];
 }
 
-const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }> = ({ newsHeadlines, userId }) => {
+interface MarketIntelligenceProps {
+  newsHeadlines: string[];
+  userId?: string;
+  history?: any[];
+  onAssetGenerated?: (asset: any) => void;
+}
+
+const MarketIntelligence: React.FC<MarketIntelligenceProps> = ({ newsHeadlines, userId, history = [], onAssetGenerated }) => {
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -52,7 +61,6 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
       if (result) {
         const s = result.sentiment.toLowerCase();
         let color: 'emerald' | 'rose' | 'slate' = 'slate';
-        // Mapeamento de sentimentos em português ou inglês para cores
         if (s.includes('otimista') || s.includes('alta') || s.includes('bullish') || s.includes('verde')) color = 'emerald';
         else if (s.includes('pessimista') || s.includes('baixa') || s.includes('bearish') || s.includes('queda')) color = 'rose';
         
@@ -85,7 +93,7 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
     setIsGeneratingImage(true);
     
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `Futuristic visualization of financial success, theme: ${data.sentiment}, brazilian investment prosperity, 8k cinematic lighting.`;
+    const prompt = `Futuristic visualization of financial success, theme: ${data.sentiment}, brazilian investment prosperity, 8k cinematic lighting, ultra detailed, photorealistic.`;
 
     try {
       const response = await ai.models.generateContent({
@@ -105,7 +113,15 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
 
       if (imageUrl) {
         setGeneratedImage(imageUrl);
+        const newAsset = {
+          user_id: userId,
+          prompt,
+          image_url: imageUrl,
+          category: 'wealth_vision',
+          created_at: new Date().toISOString()
+        };
         await saveGeneratedAsset(userId, prompt, imageUrl, 'wealth_vision');
+        if (onAssetGenerated) onAssetGenerated(newAsset);
       }
     } catch (error) {
       console.error("Erro ao gerar imagem:", error);
@@ -161,7 +177,7 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
         </div>
         <div className="text-center">
           <p className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">Gerando Estratégia</p>
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">Modo Turbo Ativado (Traduzindo...)</p>
+          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">Analisando tendências do mercado financeiro...</p>
         </div>
       </div>
     );
@@ -184,7 +200,7 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
   if (!data) return null;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-8 animate-fade-in pb-12">
       <section className="bg-white dark:bg-darkCard p-6 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder shadow-sm overflow-hidden relative group">
         <div className="absolute top-0 right-0 p-8 opacity-5">
           {data.sentimentColor === 'rose' ? <TrendingDown size={120} /> : <TrendingUp size={120} />}
@@ -231,8 +247,11 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
         </div>
 
         {generatedImage && (
-          <div className="mt-8 rounded-[2rem] overflow-hidden border-4 border-indigo-500/20 shadow-2xl animate-in zoom-in-95 duration-500">
+          <div className="mt-8 rounded-[2rem] overflow-hidden border-4 border-indigo-500/20 shadow-2xl animate-in zoom-in-95 duration-500 relative group/img">
             <img src={generatedImage} alt="Visão de Riqueza" className="w-full h-auto object-cover max-h-[400px]" />
+            <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md p-2 rounded-xl text-white opacity-0 group-hover/img:opacity-100 transition-opacity">
+              <Sparkles size={16} className="text-emerald-400" />
+            </div>
           </div>
         )}
 
@@ -250,6 +269,44 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
         <ForecastCard title="Médio Prazo" icon={LineChart} data={data.mediumTerm} accentColor="text-amber-500" />
         <ForecastCard title="Longo Prazo" icon={ShieldCheck} data={data.longTerm} accentColor="text-emerald-500" />
       </div>
+
+      {history.length > 0 && (
+        <section className="mt-12 space-y-6">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center">
+              <HistoryIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Histórico de Visões</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {history.map((asset, idx) => (
+              <div key={asset.id || idx} className="bg-white dark:bg-darkCard rounded-[2rem] border border-slate-200 dark:border-darkBorder overflow-hidden shadow-sm hover:shadow-xl transition-all group flex flex-col">
+                <div className="relative aspect-video overflow-hidden">
+                  <img src={asset.image_url} alt="Histórico de Visão" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                    <button 
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = asset.image_url;
+                        link.download = `finvue-vision-${idx}.png`;
+                        link.click();
+                      }}
+                      className="bg-white/20 backdrop-blur-md text-white p-3 rounded-2xl hover:bg-white/30 transition-colors"
+                    >
+                      <Download size={20} />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-2">Gerado em {new Date(asset.created_at).toLocaleDateString()}</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 font-medium italic line-clamp-2">"{asset.prompt}"</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };
