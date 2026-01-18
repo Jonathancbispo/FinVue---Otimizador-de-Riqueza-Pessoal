@@ -462,29 +462,69 @@ const App: React.FC = () => {
                           Fluxo Mensal vs Lucratividade
                         </h3>
                         <div className="flex items-center space-x-3 text-[10px] font-bold uppercase tracking-widest">
-                          <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-indigo-500"></div><span className="text-slate-400">Renda</span></div>
-                          <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div><span className="text-slate-400">Gasto</span></div>
-                          <div className="flex items-center space-x-1"><div className="w-2 h-2 bg-emerald-500"></div><span className="text-slate-400">Saldo</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-slate-400">Renda</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-rose-500"></div><span className="text-slate-400">Gasto</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-2 h-2 bg-indigo-500"></div><span className="text-slate-400">Saldo</span></div>
                         </div>
                       </div>
                       <div className="w-full flex-grow min-h-[300px] h-[35vh] max-h-[500px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <ComposedChart data={results.allMonthlyResults}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <defs>
+                              <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.9}/>
+                                <stop offset="100%" stopColor="#34d399" stopOpacity={0.4}/>
+                              </linearGradient>
+                              <linearGradient id="gradIncomeSelected" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#059669" stopOpacity={1}/>
+                                <stop offset="100%" stopColor="#10b981" stopOpacity={0.8}/>
+                              </linearGradient>
+                              <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.9}/>
+                                <stop offset="100%" stopColor="#fb7185" stopOpacity={0.4}/>
+                              </linearGradient>
+                              <linearGradient id="gradExpenseSelected" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#e11d48" stopOpacity={1}/>
+                                <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.8}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" opacity={0.5} />
                             <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
                             <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
-                            <Tooltip cursor={{fill: 'rgba(99, 102, 241, 0.03)'}} contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }} formatter={(value: any) => formatCurrency(value)} />
-                            <Bar name="Renda" dataKey="income" radius={[4, 4, 0, 0]} barSize={25}>
+                            <Tooltip 
+                              cursor={{fill: 'rgba(99, 102, 241, 0.05)'}} 
+                              contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }} 
+                              formatter={(value: any) => formatCurrency(value)} 
+                            />
+                            <Bar name="Renda" dataKey="income" radius={[6, 6, 0, 0]} barSize={22}>
                               {results.allMonthlyResults.map((entry, index) => (
-                                <Cell key={`cell-i-${index}`} fill={index === currentMonthIdx ? '#6366f1' : '#c7d2fe'} />
+                                <Cell 
+                                  key={`cell-i-${index}`} 
+                                  fill={index === currentMonthIdx ? 'url(#gradIncomeSelected)' : 'url(#gradIncome)'} 
+                                  stroke={index === currentMonthIdx ? '#059669' : 'none'}
+                                  strokeWidth={1}
+                                />
                               ))}
                             </Bar>
-                            <Bar name="Despesa" dataKey="expense" radius={[4, 4, 0, 0]} barSize={25}>
+                            <Bar name="Despesa" dataKey="expense" radius={[6, 6, 0, 0]} barSize={22}>
                               {results.allMonthlyResults.map((entry, index) => (
-                                <Cell key={`cell-e-${index}`} fill={index === currentMonthIdx ? '#f59e0b' : '#fde68a'} />
+                                <Cell 
+                                  key={`cell-e-${index}`} 
+                                  fill={index === currentMonthIdx ? 'url(#gradExpenseSelected)' : 'url(#gradExpense)'} 
+                                  stroke={index === currentMonthIdx ? '#e11d48' : 'none'}
+                                  strokeWidth={1}
+                                />
                               ))}
                             </Bar>
-                            <Line name="Saldo" type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} />
+                            <Line 
+                              name="Saldo" 
+                              type="monotone" 
+                              dataKey="balance" 
+                              stroke="#6366f1" 
+                              strokeWidth={4} 
+                              dot={{ r: 5, fill: '#6366f1', strokeWidth: 3, stroke: '#fff' }} 
+                              activeDot={{ r: 7, strokeWidth: 0 }} 
+                            />
                           </ComposedChart>
                         </ResponsiveContainer>
                       </div>
@@ -543,7 +583,7 @@ const App: React.FC = () => {
                       <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Meta Anual (Total 12 meses)</h3>
                       <div className="space-y-4">
                         <div><p className="text-[10px] text-slate-500 uppercase font-bold">Expectativa Bruta</p><p className="text-xl font-bold">{formatCurrency(results.annualGross)}</p></div>
-                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Gasto Total Previsto</p><p className="text-xl font-bold text-amber-400">{formatCurrency(results.annualExpenses)}</p></div>
+                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Gasto Total Previsto</p><p className="text-xl font-bold text-rose-400">{formatCurrency(results.annualExpenses)}</p></div>
                         <div className="pt-4 border-t border-white/10"><p className="text-[10px] text-indigo-400 uppercase font-bold">Projeção Final</p><p className={`text-2xl font-black ${results.annualBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(results.annualBalance)}</p></div>
                       </div>
                     </div>
@@ -599,8 +639,8 @@ const App: React.FC = () => {
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
                             <Tooltip formatter={(val: number) => formatCurrency(val)} />
-                            <Bar name="Renda" dataKey="income" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                            <Bar name="Despesa" dataKey="expense" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                            <Bar name="Renda" dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            <Bar name="Despesa" dataKey="expense" fill="#f43f5e" radius={[4, 4, 0, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
