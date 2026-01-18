@@ -117,29 +117,51 @@ const App: React.FC = () => {
   const monthScrollRef = useRef<HTMLDivElement>(null);
   const monthRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const [state, setState] = useState<FinancialState>(() => {
-    const createEmptyYear = () => Array(12).fill(0);
-    return {
-      income: { fixed: createEmptyYear(), extra: createEmptyYear(), investments: createEmptyYear() },
-      expenses: { fixed: createEmptyYear(), creditCard: createEmptyYear(), monthlyPurchases: createEmptyYear(), butcher: createEmptyYear(), weekly: createEmptyYear(), otherExpenses: createEmptyYear() }
-    };
-  });
+  const createEmptyYear = () => Array(12).fill(0);
+  const defaultState: FinancialState = {
+    income: { fixed: createEmptyYear(), extra: createEmptyYear(), investments: createEmptyYear() },
+    expenses: { fixed: createEmptyYear(), creditCard: createEmptyYear(), monthlyPurchases: createEmptyYear(), butcher: createEmptyYear(), weekly: createEmptyYear(), otherExpenses: createEmptyYear() }
+  };
 
+  const [state, setState] = useState<FinancialState>(defaultState);
   const [aiAdvice, setAiAdvice] = useState<string>('');
   const [loadingAdvice, setLoadingAdvice] = useState<boolean>(false);
 
-  // Auth Listener
+  // Deep Merge para garantir que dados parciais do Supabase não quebrem o app
+  const safeMergeState = (incoming: any): FinancialState => {
+    const merged = { ...defaultState };
+    if (!incoming) return merged;
+
+    if (incoming.income) {
+      merged.income = {
+        fixed: Array.isArray(incoming.income.fixed) ? incoming.income.fixed : createEmptyYear(),
+        extra: Array.isArray(incoming.income.extra) ? incoming.income.extra : createEmptyYear(),
+        investments: Array.isArray(incoming.income.investments) ? incoming.income.investments : createEmptyYear(),
+      };
+    }
+
+    if (incoming.expenses) {
+      merged.expenses = {
+        fixed: Array.isArray(incoming.expenses.fixed) ? incoming.expenses.fixed : createEmptyYear(),
+        creditCard: Array.isArray(incoming.expenses.creditCard) ? incoming.expenses.creditCard : createEmptyYear(),
+        monthlyPurchases: Array.isArray(incoming.expenses.monthlyPurchases) ? incoming.expenses.monthlyPurchases : createEmptyYear(),
+        butcher: Array.isArray(incoming.expenses.butcher) ? incoming.expenses.butcher : createEmptyYear(),
+        weekly: Array.isArray(incoming.expenses.weekly) ? incoming.expenses.weekly : createEmptyYear(),
+        otherExpenses: Array.isArray(incoming.expenses.otherExpenses) ? incoming.expenses.otherExpenses : createEmptyYear(),
+      };
+    }
+    return merged;
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsAuthenticated(!!session);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setIsAuthenticated(!!session);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -151,7 +173,9 @@ const App: React.FC = () => {
         getUserAssets(userId)
       ]);
       
-      if (cloudData) setState(cloudData);
+      if (cloudData) {
+        setState(safeMergeState(cloudData));
+      }
       setGeneratedAssets(assets);
       setDataLoaded(true);
       setSetupRequired(false);
@@ -286,6 +310,9 @@ const App: React.FC = () => {
     });
   };
 
+  const formatCurrency = (num: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+  const formatCompact = (num: number) => new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(num);
+
   const handleAiAdvice = async () => {
     if (loadingAdvice) return;
     setLoadingAdvice(true);
@@ -293,25 +320,17 @@ const App: React.FC = () => {
       const advice = await getFinancialAdvice(state, results as any, currentMonthIdx);
       setAiAdvice(advice);
     } catch (error) {
-      console.error("Erro ao obter conselho da IA:", error);
-      setAiAdvice("Mantenha o equilíbrio entre renda e despesas para um futuro sólido.");
+      setAiAdvice("Foco no seu futuro financeiro!");
     } finally {
       setLoadingAdvice(false);
     }
   };
 
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      setSession(null);
-      setIsAuthenticated(false);
-    } catch (error) {
-      console.error("Erro ao fazer logout:", error);
-    }
+    await supabase.auth.signOut();
+    setSession(null);
+    setIsAuthenticated(false);
   };
-
-  const formatCurrency = (num: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
-  const formatCompact = (num: number) => new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(num);
 
   const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split('@')[0];
 
@@ -383,24 +402,27 @@ const App: React.FC = () => {
 
           <main className="max-w-7xl mx-auto px-4 mt-6 flex-1 w-full lg:mt-8">
             {setupRequired && (
-              <div className="mb-8 p-6 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-[2.5rem] flex flex-col space-y-6 animate-fade-in shadow-xl">
-                <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="mb-8 p-8 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-[3rem] shadow-xl animate-fade-in">
+                <div className="flex flex-col md:flex-row items-center gap-8">
                   <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-3xl flex items-center justify-center shrink-0">
                     <Database className="w-8 h-8 text-amber-600 dark:text-amber-400" />
                   </div>
-                  <div className="flex-1 space-y-2 text-center md:text-left">
-                    <h3 className="text-xl font-black text-amber-900 dark:text-amber-100 uppercase tracking-tight">Primeira Configuração Necessária</h3>
+                  <div className="flex-1 text-center md:text-left space-y-3">
+                    <h3 className="text-xl font-black text-amber-900 dark:text-amber-100 uppercase tracking-tight">Erro de Sincronização Detectado</h3>
                     <p className="text-sm text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
-                      Sua instância do Supabase ainda não possui as tabelas de armazenamento. 
-                      Para sincronizar seus dados, você precisa executar um script SQL no seu painel do Supabase.
+                      Sua tabela do Supabase precisa de um **Índice Único** para salvar os dados corretamente. 
+                      Execute o comando SQL abaixo no seu painel:
                     </p>
+                    <div className="bg-black/90 p-4 rounded-2xl font-mono text-[10px] text-emerald-400 overflow-x-auto">
+                      CREATE UNIQUE INDEX ON financial_data (user_id, year);
+                    </div>
                   </div>
                   <button 
                     onClick={() => fetchData(session?.user?.id)}
-                    className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center space-x-2 shadow-lg shadow-amber-200 dark:shadow-none transition-all active:scale-95 shrink-0"
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 rounded-2xl font-bold flex items-center space-x-2 shadow-lg transition-all active:scale-95 shrink-0"
                   >
                     <RefreshCw size={18} />
-                    <span>Já configurei</span>
+                    <span>Já Configurei</span>
                   </button>
                 </div>
               </div>
@@ -440,7 +462,7 @@ const App: React.FC = () => {
                     <SummaryCard title="Renda Líquida" value={results.allMonthlyResults[currentMonthIdx].income} type="income" subtitle={MONTHS[currentMonthIdx]} />
                     <SummaryCard title="Despesa Total" value={results.allMonthlyResults[currentMonthIdx].expense} type="expense" subtitle={MONTHS[currentMonthIdx]} />
                     <SummaryCard title="Saldo do Mês" value={results.allMonthlyResults[currentMonthIdx].balance} type="balance" subtitle={MONTHS[currentMonthIdx]} />
-                    <SummaryCard title="Valor Investido" value={results.allMonthlyResults[currentMonthIdx].invested} type="positive" subtitle={MONTHS[currentMonthIdx]} />
+                    <SummaryCard title="Valor Investido" value={results.allMonthlyResults[currentMonthIdx].invested} type="balance" subtitle={MONTHS[currentMonthIdx]} />
                   </div>
                 </div>
 
@@ -453,8 +475,8 @@ const App: React.FC = () => {
                           Fluxo Mensal vs Lucratividade
                         </h3>
                         <div className="flex items-center space-x-3 text-[10px] font-black uppercase tracking-widest">
-                          <div className="flex items-center space-x-1"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]"></div><span className="text-emerald-600 dark:text-emerald-400">Renda</span></div>
-                          <div className="flex items-center space-x-1"><div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.7)]"></div><span className="text-rose-600 dark:text-rose-400">Gasto</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-emerald-600 dark:text-emerald-400">Renda</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div><span className="text-rose-600 dark:text-rose-400">Gasto</span></div>
                           <div className="flex items-center space-x-1"><div className="w-3 h-0.5 bg-indigo-500"></div><span className="text-indigo-600 dark:text-indigo-400">Saldo</span></div>
                         </div>
                       </div>
@@ -470,10 +492,6 @@ const App: React.FC = () => {
                                 <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.9}/>
                                 <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.2}/>
                               </linearGradient>
-                              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation="3" result="blur" />
-                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                              </filter>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#1e293b" : "#f1f5f9"} />
                             <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
@@ -492,53 +510,23 @@ const App: React.FC = () => {
                             />
                             <Bar name="Renda" dataKey="income" radius={[6, 6, 0, 0]} barSize={20}>
                               {results.allMonthlyResults.map((entry, index) => (
-                                <Cell 
-                                  key={`cell-i-${index}`} 
-                                  fill={index === currentMonthIdx ? '#10b981' : 'url(#gradIncome)'} 
-                                  stroke={index === currentMonthIdx ? '#059669' : 'none'}
-                                  strokeWidth={index === currentMonthIdx ? 2 : 0}
-                                />
+                                <Cell key={`cell-i-${index}`} fill={index === currentMonthIdx ? '#10b981' : 'url(#gradIncome)'} />
                               ))}
                             </Bar>
                             <Bar name="Despesa" dataKey="expense" radius={[6, 6, 0, 0]} barSize={20}>
                               {results.allMonthlyResults.map((entry, index) => (
-                                <Cell 
-                                  key={`cell-e-${index}`} 
-                                  fill={index === currentMonthIdx ? '#f43f5e' : 'url(#gradExpense)'} 
-                                  stroke={index === currentMonthIdx ? '#e11d48' : 'none'}
-                                  strokeWidth={index === currentMonthIdx ? 2 : 0}
-                                />
+                                <Cell key={`cell-e-${index}`} fill={index === currentMonthIdx ? '#f43f5e' : 'url(#gradExpense)'} />
                               ))}
                             </Bar>
-                            <Line 
-                              name="Saldo" 
-                              type="monotone" 
-                              dataKey="balance" 
-                              stroke="#6366f1" 
-                              strokeWidth={4} 
-                              dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: isDarkMode ? '#0f172a' : '#fff' }} 
-                              activeDot={{ r: 7, strokeWidth: 0 }} 
-                              filter="url(#glow)"
-                            />
-                            <Legend 
-                              verticalAlign="top" 
-                              align="right" 
-                              wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                              formatter={(value) => {
-                                const colors: any = { 'Renda': '#10b981', 'Despesa': '#f43f5e', 'Saldo': '#6366f1' };
-                                return <span style={{ color: colors[value] }}>{value}</span>;
-                              }}
-                            />
+                            <Line name="Saldo" type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={4} dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: isDarkMode ? '#0f172a' : '#fff' }} />
+                            <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }} formatter={(value) => <span style={{ color: value === 'Renda' ? '#10b981' : value === 'Despesa' ? '#f43f5e' : '#6366f1' }}>{value}</span>} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       </div>
                     </div>
 
                     <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
-                      <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm">
-                        <LineIcon className="w-4 h-4 mr-2 text-indigo-500" />
-                        Curva Patrimonial Jan - {MONTHS[currentMonthIdx]}
-                      </h3>
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm"><LineIcon className="w-4 h-4 mr-2 text-indigo-500" />Curva Patrimonial</h3>
                       <div className="w-full flex-grow min-h-[250px] h-[30vh] max-h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={results.cumulativeResults.slice(0, currentMonthIdx + 1)}>
@@ -550,10 +538,7 @@ const App: React.FC = () => {
                             </defs>
                             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
                             <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
-                            <Tooltip 
-                              contentStyle={{ borderRadius: '1rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff' }} 
-                              itemStyle={{ color: '#6366f1', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}
-                            />
+                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff' }} itemStyle={{ color: '#6366f1', fontSize: '11px', fontWeight: 'bold' }} />
                             <Area name="Patrimônio" type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
                           </AreaChart>
                         </ResponsiveContainer>
@@ -562,43 +547,6 @@ const App: React.FC = () => {
                   </div>
                   
                   <div className="space-y-8">
-                    <div className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
-                      <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center text-sm">
-                        <PieIcon className="w-4 h-4 mr-2 text-indigo-500" />
-                        Gastos do Mês de {MONTHS[currentMonthIdx]}
-                      </h3>
-                      <div className="w-full h-[220px]">
-                        {results.allMonthlyResults[currentMonthIdx].expense > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie 
-                                data={[
-                                  { name: 'Fixo', value: state.expenses.fixed[currentMonthIdx] },
-                                  { name: 'Cartão', value: state.expenses.creditCard[currentMonthIdx] },
-                                  { name: 'Compras', value: state.expenses.monthlyPurchases[currentMonthIdx] },
-                                  { name: 'Açougue', value: state.expenses.butcher[currentMonthIdx] },
-                                  { name: 'Semanal', value: state.expenses.weekly[currentMonthIdx] },
-                                  { name: 'Outras', value: state.expenses.otherExpenses[currentMonthIdx] },
-                                ].filter(d => d.value > 0)} 
-                                cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={8} dataKey="value" stroke="none"
-                              >
-                                {COLORS.map((color, index) => <Cell key={`cell-${index}`} fill={color} />)}
-                              </Pie>
-                              <Tooltip 
-                                itemStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}
-                                formatter={(value: number) => formatCurrency(value)}
-                              />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-full opacity-20">
-                            <LayoutDashboard size={40} className="mb-2" />
-                            <p className="text-[10px] font-bold uppercase tracking-widest">Sem gastos</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
                     <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
                       <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-6">Meta Anual Estimada</h3>
@@ -617,12 +565,12 @@ const App: React.FC = () => {
               <div className="space-y-8 animate-fade-in pb-12">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Relatórios de Performance</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Análise granular por períodos personalizados.</p>
+                    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Performance Analítica</h2>
+                    <p className="text-sm text-slate-500 font-medium">Histórico consolidado e eficiência financeira.</p>
                   </div>
-                  <div className="bg-white dark:bg-darkCard p-1 rounded-2xl border border-slate-200 dark:border-darkBorder flex items-center shadow-sm overflow-hidden">
+                  <div className="bg-white dark:bg-darkCard p-1 rounded-2xl border border-slate-200 dark:border-darkBorder flex items-center shadow-sm">
                     {PERIOD_OPTIONS.map((period) => (
-                       <button key={period.label} onClick={() => setSelectedPeriod(period)} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl ${selectedPeriod.label === period.label ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                       <button key={period.label} onClick={() => setSelectedPeriod(period)} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl ${selectedPeriod.label === period.label ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>
                         {period.label}
                        </button>
                     ))}
@@ -630,15 +578,15 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                   <SummaryCard title="Renda no Período" value={results.pGross} type="income" subtitle={selectedPeriod.label} />
-                   <SummaryCard title="Gasto no Período" value={results.pExpenses} type="expense" subtitle={selectedPeriod.label} />
-                   <SummaryCard title="Investido" value={results.pInvested} type="positive" subtitle={selectedPeriod.label} />
-                   <SummaryCard title="Saldo Final" value={results.pBalance} type="balance" subtitle={selectedPeriod.label} />
+                   <SummaryCard title="Renda Bruta" value={results.pGross} type="income" subtitle={selectedPeriod.label} />
+                   <SummaryCard title="Gastos Totais" value={results.pExpenses} type="expense" subtitle={selectedPeriod.label} />
+                   <SummaryCard title="Investido" value={results.pInvested} type="balance" subtitle={selectedPeriod.label} />
+                   <SummaryCard title="Lucratividade" value={results.pBalance} type="balance" subtitle={selectedPeriod.label} />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                    <div className="lg:col-span-1 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col items-center text-center">
-                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Eficiência do Período</h3>
+                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Eficiência Líquida</h3>
                       <div className="w-full aspect-square relative max-w-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={15} data={[{ name: 'Eficiência', value: results.savingsRate, fill: '#6366f1' }]} startAngle={180} endAngle={0}>
@@ -647,7 +595,7 @@ const App: React.FC = () => {
                         </ResponsiveContainer>
                         <div className="absolute top-[45%] left-1/2 -translate-x-1/2 text-center">
                           <p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{results.savingsRate}%</p>
-                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-2">Taxa de Poupança</p>
+                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-2">Retenção</p>
                         </div>
                       </div>
                    </div>
@@ -661,14 +609,11 @@ const App: React.FC = () => {
                             <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
                             <Tooltip 
                               cursor={{fill: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'}}
-                              contentStyle={{ borderRadius: '1.2rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.15)', padding: '12px' }}
+                              contentStyle={{ borderRadius: '1.2rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff', padding: '12px' }}
                               itemStyle={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}
                               formatter={(val: number, name: string) => {
                                 const colorMap: any = { 'Renda': '#10b981', 'Despesa': '#f43f5e' };
-                                return [
-                                  <span style={{ color: colorMap[name], fontWeight: 'bold' }}>{formatCurrency(val)}</span>, 
-                                  <span style={{ color: colorMap[name] }}>{name}</span>
-                                ];
+                                return [<span style={{ color: colorMap[name], fontWeight: 'bold' }}>{formatCurrency(val)}</span>, <span style={{ color: colorMap[name] }}>{name}</span>];
                               }} 
                             />
                             <Bar name="Renda" dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -744,9 +689,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Grid de Widgets do Perfil */}
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                  {/* Performance Anual Rápida */}
                   <div className="bg-slate-900 dark:bg-slate-950 p-8 rounded-[3rem] text-white shadow-2xl xl:col-span-1 flex flex-col justify-between overflow-hidden relative group">
                     <div className="absolute -top-10 -right-10 opacity-10 group-hover:scale-110 transition-transform duration-700">
                       <Trophy size={200} />
@@ -762,74 +705,15 @@ const App: React.FC = () => {
                           <p className="text-[11px] text-slate-500 uppercase font-black tracking-widest mb-1">Taxa Média de Poupança</p>
                           <div className="flex items-end space-x-3">
                             <p className="text-4xl font-black">{results.savingsRate}%</p>
-                            <div className="pb-1.5 flex space-x-1">
-                              {[1, 2, 3, 4, 5].map(i => (
-                                <div key={i} className={`w-1.5 h-6 rounded-full ${i/5 * 100 <= results.savingsRate ? 'bg-indigo-500' : 'bg-slate-800'}`}></div>
-                              ))}
-                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="mt-12 p-4 bg-white/5 rounded-2xl border border-white/5 relative z-10">
-                      <p className="text-[10px] font-medium text-slate-400 leading-relaxed italic">
-                        "Sua disciplina financeira este ano está {results.savingsRate > 20 ? 'acima da média do mercado' : 'em trajetória de crescimento'}. Continue focando na otimização de custos fixos."
-                      </p>
-                    </div>
                   </div>
-
-                  {/* Configurações em duas colunas */}
                   <div className="xl:col-span-2">
                     <ProfileSettings initialName={displayName} email={session?.user?.email} />
                   </div>
                 </div>
-
-                {/* Galeria de Visões */}
-                <section className="space-y-8 pt-8 border-t border-slate-200 dark:border-darkBorder">
-                  <div className="flex items-center justify-between px-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center">
-                        <History className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Galeria de Futuro</h3>
-                        <p className="text-sm text-slate-500 font-medium">Visualizações estratégicas geradas pela IA.</p>
-                      </div>
-                    </div>
-                    {loadingAssets && <Loader2 className="animate-spin text-slate-400" size={20} />}
-                  </div>
-
-                  {generatedAssets.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                      {generatedAssets.map((asset) => (
-                        <div key={asset.id} className="group relative bg-white dark:bg-darkCard rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm overflow-hidden hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2">
-                          <div className="aspect-[4/5] overflow-hidden bg-slate-100 dark:bg-slate-800">
-                            <img src={asset.image_url} alt={asset.prompt} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-                          </div>
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent p-8 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                            <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em] mb-3">{new Date(asset.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</p>
-                            <p className="text-sm text-white font-medium line-clamp-4 leading-relaxed italic">"{asset.prompt}"</p>
-                          </div>
-                          <div className="absolute top-6 right-6 bg-white/20 backdrop-blur-xl p-3 rounded-2xl border border-white/20 text-white shadow-2xl scale-0 group-hover:scale-100 transition-transform duration-500">
-                            <ImageIcon size={20} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-white dark:bg-darkCard border-2 border-dashed border-slate-200 dark:border-darkBorder rounded-[4rem] p-24 flex flex-col items-center justify-center text-center">
-                      <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800/50 rounded-[2.5rem] flex items-center justify-center mb-8 text-slate-300">
-                        <ImageIcon size={48} />
-                      </div>
-                      <h4 className="text-xl font-black text-slate-900 dark:text-white">Seu quadro de sonhos está limpo</h4>
-                      <p className="text-sm text-slate-500 max-w-sm mt-4 font-medium leading-relaxed">Use o motor de Inteligência de Mercado para visualizar o impacto das suas decisões financeiras no futuro.</p>
-                      <button onClick={() => setActiveTab('strategy')} className="mt-10 bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-bold flex items-center space-x-2 shadow-2xl shadow-indigo-200 dark:shadow-none transition-all active:scale-95">
-                        <Sparkles size={20} />
-                        <span>Gerar Primeira Visão</span>
-                      </button>
-                    </div>
-                  )}
-                </section>
               </div>
             )}
           </main>
@@ -837,29 +721,25 @@ const App: React.FC = () => {
           <ChatBot financialData={state} />
 
           <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-darkCard/95 backdrop-blur-2xl border-t border-slate-200 dark:border-darkBorder h-20 px-2 lg:hidden z-40 overflow-x-auto scrollbar-hide select-none">
-            <div className="flex items-center justify-start min-w-max h-full px-4 space-x-2 mx-auto sm:justify-center">
-              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'dashboard' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
-                <div className={`p-1.5 transition-transform ${activeTab === 'dashboard' ? 'scale-110' : ''}`}><LayoutDashboard size={22} /></div>
+            <div className="flex items-center justify-start min-w-max h-full px-4 space-x-2 mx-auto">
+              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[80px] rounded-2xl py-1 ${activeTab === 'dashboard' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <LayoutDashboard size={22} />
                 <span className="text-[9px] font-black uppercase tracking-widest">Painel</span>
               </button>
-              
-              <button onClick={() => setActiveTab('inputs')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'inputs' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
-                <div className={`p-1.5 transition-transform ${activeTab === 'inputs' ? 'scale-110' : ''}`}><PlusCircle size={22} /></div>
+              <button onClick={() => setActiveTab('inputs')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[80px] rounded-2xl py-1 ${activeTab === 'inputs' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <PlusCircle size={22} />
                 <span className="text-[9px] font-black uppercase tracking-widest">Lançar</span>
               </button>
-
-              <button onClick={() => setActiveTab('annual')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'annual' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
-                <div className={`p-1.5 transition-transform ${activeTab === 'annual' ? 'scale-110' : ''}`}><BarChart3 size={22} /></div>
+              <button onClick={() => setActiveTab('annual')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[80px] rounded-2xl py-1 ${activeTab === 'annual' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <BarChart3 size={22} />
                 <span className="text-[9px] font-black uppercase tracking-widest">Relatórios</span>
               </button>
-
-              <button onClick={() => setActiveTab('strategy')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'strategy' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
-                <div className={`p-1.5 transition-transform ${activeTab === 'strategy' ? 'scale-110' : ''}`}><BrainCircuit size={22} /></div>
+              <button onClick={() => setActiveTab('strategy')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[80px] rounded-2xl py-1 ${activeTab === 'strategy' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <BrainCircuit size={22} />
                 <span className="text-[9px] font-black uppercase tracking-widest">Estratégia</span>
               </button>
-
-              <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'profile' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
-                <div className={`p-1.5 transition-transform ${activeTab === 'profile' ? 'scale-110' : ''}`}><User size={22} /></div>
+              <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[80px] rounded-2xl py-1 ${activeTab === 'profile' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <User size={22} />
                 <span className="text-[9px] font-black uppercase tracking-widest">Perfil</span>
               </button>
             </div>
