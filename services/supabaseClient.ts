@@ -10,32 +10,45 @@ const handleError = (error: any, context: string) => {
   const message = error?.message || 'Erro desconhecido';
   const code = error?.code || 'N/A';
   console.error(`[Supabase ${context}] Code: ${code} - Message: ${message}`);
+  // PGRST205 é comumente falta de índice único para upsert
   return { message, code, full: error };
 };
 
 export const saveFinancialData = async (userId: string, data: any) => {
+  // Importante: Para o upsert funcionar, a tabela financial_data DEVE ter 
+  // um UNIQUE INDEX nas colunas (user_id, year).
   const { error } = await supabase
     .from('financial_data')
-    .upsert({ 
-      user_id: userId, 
-      year: new Date().getFullYear(),
-      data: data,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'user_id,year' });
+    .upsert(
+      { 
+        user_id: userId, 
+        year: new Date().getFullYear(),
+        data: data,
+        updated_at: new Date().toISOString()
+      }, 
+      { onConflict: 'user_id,year' }
+    );
 
-  if (error) throw handleError(error, 'Save');
+  if (error) {
+    const handled = handleError(error, 'Save');
+    throw handled;
+  }
 };
 
 export const loadFinancialData = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('financial_data')
-    .select('data')
-    .eq('user_id', userId)
-    .eq('year', new Date().getFullYear())
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('financial_data')
+      .select('data')
+      .eq('user_id', userId)
+      .eq('year', new Date().getFullYear())
+      .maybeSingle();
 
-  if (error) throw handleError(error, 'Load');
-  return data?.data || null;
+    if (error) throw error;
+    return data?.data || null;
+  } catch (err) {
+    throw handleError(err, 'Load');
+  }
 };
 
 export const saveGeneratedAsset = async (userId: string, prompt: string, imageUrl: string, category: string = 'wealth_vision') => {

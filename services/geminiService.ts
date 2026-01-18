@@ -2,13 +2,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { CalculationResults, ExpenseData, IncomeData, FinancialState } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const getFinancialAdvice = async (
   state: FinancialState,
   results: CalculationResults,
   currentMonthIdx: number
 ): Promise<string> => {
+  // Always create a new instance inside the function to use latest process.env.API_KEY
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const MONTHS = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -29,6 +29,7 @@ export const getFinancialAdvice = async (
       contents: prompt,
       config: { thinkingConfig: { thinkingBudget: 0 } }
     });
+    // Extract text output using the .text property (not a method)
     return response.text || "Foco no seu futuro financeiro!";
   } catch (error) {
     return "Consistência é a chave para a liberdade financeira.";
@@ -36,6 +37,8 @@ export const getFinancialAdvice = async (
 };
 
 export const getMarketIntelligence = async (newsHeadlines: string[]): Promise<any> => {
+  // Always create a new instance inside the function to use latest process.env.API_KEY
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const context = newsHeadlines && newsHeadlines.length > 0 
     ? `Notícias Atuais: ${newsHeadlines.slice(0, 5).join(" | ")}` 
     : "Tendências econômicas globais para o investidor brasileiro em 2025";
@@ -90,6 +93,7 @@ export const getMarketIntelligence = async (newsHeadlines: string[]): Promise<an
         }
       },
     });
+    // Extract text output using the .text property (not a method)
     return JSON.parse(response.text || "{}");
   } catch (error) {
     console.error("Erro Inteligência de Mercado:", error);
@@ -102,6 +106,8 @@ export const chatWithAi = async (
   fullData: FinancialState,
   history: { role: 'user' | 'model'; text: string }[]
 ): Promise<string> => {
+  // Always create a new instance inside the function to use latest process.env.API_KEY
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const systemInstruction = `Você é o FinVue Voice. Especialista em finanças pessoais.
   Responda SEMPRE em Português do Brasil de forma extremamente direta. 
   Dados atuais do usuário: ${JSON.stringify(fullData)}.`;
@@ -125,6 +131,7 @@ export const chatWithAi = async (
         thinkingConfig: { thinkingBudget: 0 }
       },
     });
+    // Extract text output using the .text property (not a method)
     return response.text || "Não consegui processar sua solicitação.";
   } catch (error) {
     return "Erro na conexão com o servidor de IA.";

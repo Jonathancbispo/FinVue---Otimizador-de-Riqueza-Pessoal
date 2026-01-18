@@ -8,7 +8,7 @@ export interface IncomeData {
 export interface ExpenseData {
   fixed: number[];
   creditCard: number[];
-  monthlyPurchases: number[]; // Substituído 'groceries'
+  monthlyPurchases: number[];
   butcher: number[];
   weekly: number[];
   otherExpenses: number[];
@@ -20,13 +20,27 @@ export interface FinancialState {
 }
 
 export interface CalculationResults {
-  monthlyIncome: number;
-  monthlyExpenses: number;
-  monthlyBalance: number;
   annualIncome: number;
+  annualGross: number;
   annualExpenses: number;
   annualBalance: number;
-  allMonthlyResults: { income: number; expense: number; month: string }[];
+  savingsRate: number;
+  pGross: number;
+  pIncome: number;
+  pExpenses: number;
+  pInvested: number;
+  pBalance: number;
+  allMonthlyResults: { 
+    income: number; 
+    gross: number;
+    expense: number; 
+    balance: number;
+    invested: number;
+    month: string;
+    shortMonth: string;
+  }[];
+  cumulativeResults: { month: string; balance: number }[];
+  periodResults: any[];
 }
 
 export interface ChatMessage {
