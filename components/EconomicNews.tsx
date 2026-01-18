@@ -6,7 +6,7 @@ interface NewsItem {
   id: string;
   headline: string;
   summary: string;
-  relevance: 'low' | 'medium' | 'high';
+  relevance: 'Baixa' | 'Média' | 'Alta';
   source: string;
   time: string;
   link: string;
@@ -15,45 +15,6 @@ interface NewsItem {
 interface EconomicNewsProps {
   onNewsLoaded?: (headlines: string[]) => void;
 }
-
-const FALLBACK_NEWS: NewsItem[] = [
-  {
-    id: 'f1',
-    headline: 'FED sinaliza manutenção de taxas de juros frente à inflação resiliente',
-    summary: 'Membros do Federal Reserve indicam que a trajetória de queda da inflação estagnou, sugerindo juros altos por mais tempo.',
-    relevance: 'high',
-    source: 'Financial Times (Simulado)',
-    time: '5m atrás',
-    link: '#'
-  },
-  {
-    id: 'f2',
-    headline: 'PIB da China cresce acima do esperado no primeiro trimestre',
-    summary: 'A segunda maior economia do mundo mostra sinais de recuperação industrial, impulsionando commodities globais.',
-    relevance: 'medium',
-    source: 'Bloomberg (Simulado)',
-    time: '15m atrás',
-    link: '#'
-  },
-  {
-    id: 'f3',
-    headline: 'BC do Brasil monitora volatilidade cambial e não descarta intervenções',
-    summary: 'O Banco Central reforça o compromisso com a meta de inflação em meio à pressão do dólar sobre o Real.',
-    relevance: 'high',
-    source: 'Valor Econômico (Simulado)',
-    time: '30m atrás',
-    link: '#'
-  },
-  {
-    id: 'f4',
-    headline: 'Conflitos no Oriente Médio elevam preços do Petróleo Brent',
-    summary: 'Tensões geopolíticas continuam a pressionar os custos de energia, impactando cadeias de suprimentos globais.',
-    relevance: 'medium',
-    source: 'Reuters (Simulado)',
-    time: '1h atrás',
-    link: '#'
-  }
-];
 
 const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -64,26 +25,24 @@ const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
     try {
       const response = await fetch('https://ok.surf/api/v1/news-feed', {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
+        headers: { 'Accept': 'application/json' }
       });
       
-      if (!response.ok) throw new Error('Network response was not ok');
+      if (!response.ok) throw new Error('Falha na resposta da rede');
       
       const data = await response.json();
       const rawNews = data.Business || data.World || [];
       
-      if (rawNews.length === 0) throw new Error('No news found');
+      if (rawNews.length === 0) throw new Error('Nenhuma notícia encontrada');
 
       const formattedNews: NewsItem[] = rawNews.slice(0, 8).map((item: any, idx: number) => {
         const text = (item.title + item.content).toLowerCase();
-        let relevance: 'low' | 'medium' | 'high' = 'low';
+        let relevance: 'Baixa' | 'Média' | 'Alta' = 'Baixa';
         
         if (text.includes('fed') || text.includes('inflation') || text.includes('gdp') || text.includes('rates') || text.includes('war') || text.includes('juros')) {
-          relevance = 'high';
+          relevance = 'Alta';
         } else if (text.includes('earnings') || text.includes('stock') || text.includes('market') || text.includes('ações')) {
-          relevance = 'medium';
+          relevance = 'Média';
         }
 
         return {
@@ -91,7 +50,7 @@ const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
           headline: item.title,
           summary: item.content || "Clique para ver o resumo completo desta movimentação de mercado.",
           relevance,
-          source: item.source || "Global Finance",
+          source: item.source || "Finance Global",
           time: "Agora",
           link: item.link
         };
@@ -101,10 +60,8 @@ const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
       setIsFallback(false);
       if (onNewsLoaded) onNewsLoaded(formattedNews.map(n => n.headline));
     } catch (error) {
-      console.warn('Usando notícias de contingência devido a erro na API:', error);
-      setNews(FALLBACK_NEWS);
+      setNews([]);
       setIsFallback(true);
-      if (onNewsLoaded) onNewsLoaded(FALLBACK_NEWS.map(n => n.headline));
     } finally {
       setLoading(false);
     }
@@ -118,8 +75,8 @@ const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
 
   const getRelevanceBadge = (level: string) => {
     switch (level) {
-      case 'high': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800';
-      case 'medium': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+      case 'Alta': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800';
+      case 'Média': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800';
       default: return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800';
     }
   };
@@ -136,7 +93,7 @@ const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
             <div className="flex items-center space-x-2 mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${isFallback ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}></span>
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
-                {isFallback ? 'Modo de Contingência' : 'Live Feed'}
+                {isFallback ? 'Modo de Segurança' : 'Feed em Tempo Real'}
               </span>
             </div>
           </div>
@@ -192,7 +149,7 @@ const EconomicNews: React.FC<EconomicNewsProps> = ({ onNewsLoaded }) => {
         <div className="p-3 bg-amber-50 dark:bg-amber-900/10 border-t border-amber-100 dark:border-amber-900/30 flex items-center space-x-2">
           <Info size={12} className="text-amber-500 shrink-0" />
           <p className="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-tight leading-none">
-            Utilizando notícias de backup devido a problemas de conexão com o feed global.
+            Utilizando notícias de backup devido a latência no feed global.
           </p>
         </div>
       )}

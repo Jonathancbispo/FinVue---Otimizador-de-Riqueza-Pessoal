@@ -22,11 +22,21 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<{ message: string; isConfigError?: boolean; isAuthError?: boolean } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Carregar e-mail salvo e preferência de 'Lembrar de mim'
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('finvue_remembered_email');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   // Limpa erros ao alternar entre Login e Cadastro
   useEffect(() => {
@@ -59,7 +69,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
         });
         
         if (signInError) throw signInError;
-        if (data.session) onLogin(data.session);
+        
+        if (data.session) {
+          // Lógica de Lembrar de mim
+          if (rememberMe) {
+            localStorage.setItem('finvue_remembered_email', email);
+          } else {
+            localStorage.removeItem('finvue_remembered_email');
+          }
+          onLogin(data.session);
+        }
       }
     } catch (err: any) {
       let msg = err.message || 'Ocorreu um erro inesperado.';
@@ -166,7 +185,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
 
             <div className="flex items-center justify-between px-2">
               <label className="flex items-center space-x-2 cursor-pointer group">
-                <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                <input 
+                  type="checkbox" 
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" 
+                />
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors">Lembrar de mim</span>
               </label>
               {!isRegistering && (

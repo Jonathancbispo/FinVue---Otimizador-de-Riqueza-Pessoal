@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { Info } from 'lucide-react';
 
 interface NumberInputProps {
   label: string;
@@ -7,9 +8,10 @@ interface NumberInputProps {
   onChange: (val: number) => void;
   placeholder?: string;
   icon?: React.ReactNode;
+  tooltip?: string;
 }
 
-const NumberInput: React.FC<NumberInputProps> = ({ label, value, onChange, placeholder, icon }) => {
+const NumberInput: React.FC<NumberInputProps> = ({ label, value, onChange, placeholder, icon, tooltip }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     onChange(isNaN(val) ? 0 : Math.max(0, val));
@@ -17,7 +19,18 @@ const NumberInput: React.FC<NumberInputProps> = ({ label, value, onChange, place
 
   return (
     <div className="flex flex-col space-y-1.5 w-full">
-      <label className="text-sm font-medium text-slate-700 dark:text-slate-300 ml-1">{label}</label>
+      <div className="flex items-center space-x-1.5 ml-1">
+        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+        {tooltip && (
+          <div className="group relative flex items-center">
+            <Info size={14} className="text-slate-400 dark:text-slate-500 cursor-help hover:text-indigo-500 transition-colors" />
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2.5 bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50 shadow-xl border border-white/10 text-center leading-relaxed">
+              {tooltip}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="relative group">
         {icon && (
           <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors">

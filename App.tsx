@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Wallet, 
   TrendingUp, 
@@ -36,7 +36,15 @@ import {
   Zap,
   Award,
   Filter,
-  Lock
+  Lock,
+  Database,
+  Terminal,
+  Copy,
+  ExternalLink,
+  Image as ImageIcon,
+  History,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -63,10 +71,11 @@ import ChatBot from './components/ChatBot';
 import CurrencyTicker from './components/CurrencyTicker';
 import EconomicNews from './components/EconomicNews';
 import MarketIntelligence from './components/MarketIntelligence';
+import ProfileSettings from './components/ProfileSettings';
 import Login from './components/Login';
 import { FinancialState, CalculationResults } from './types';
 import { getFinancialAdvice } from './services/geminiService';
-import { supabase, loadFinancialData, saveFinancialData, updateUserProfile, updateUserPassword } from './services/supabaseClient';
+import { supabase, loadFinancialData, saveFinancialData, getUserAssets } from './services/supabaseClient';
 
 const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
 const MONTHS = [
@@ -91,6 +100,9 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [generatedAssets, setGeneratedAssets] = useState<any[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
   
   const [currentMonthIdx, setCurrentMonthIdx] = useState(new Date().getMonth());
   const [activeTab, setActiveTab] = useState<'inputs' | 'dashboard' | 'strategy' | 'profile' | 'annual'>('dashboard');
@@ -131,42 +143,66 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load Data from Supabase when authenticated
+  const fetchData = useCallback(async (userId: string) => {
+    setIsSyncing(true);
+    try {
+      const [cloudData, assets] = await Promise.all([
+        loadFinancialData(userId),
+        getUserAssets(userId)
+      ]);
+      
+      if (cloudData) setState(cloudData);
+      setGeneratedAssets(assets);
+      setDataLoaded(true);
+      setSetupRequired(false);
+    } catch (error: any) {
+      const errMsg = error?.message || String(error);
+      const errCode = error?.code || 'N/A';
+      console.error(`Erro ao carregar dados do Supabase [${errCode}]:`, errMsg);
+      
+      if (errMsg.includes('financial_data') || errCode === 'PGRST205' || errMsg.includes('schema cache')) {
+        setSetupRequired(true);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated && session?.user?.id) {
-      const fetchData = async () => {
-        setIsSyncing(true);
-        try {
-          const cloudData = await loadFinancialData(session.user.id);
-          if (cloudData) {
-            setState(cloudData);
-          }
-          setDataLoaded(true);
-        } catch (error) {
-          console.error("Erro ao carregar dados do Supabase:", error);
-        } finally {
-          setIsSyncing(false);
-        }
-      };
-      fetchData();
+      fetchData(session.user.id);
     } else {
       setDataLoaded(false);
+      setSetupRequired(false);
     }
-  }, [isAuthenticated, session]);
+  }, [isAuthenticated, session, fetchData]);
 
-  // Auto-save to Supabase with debounce and load safety
   useEffect(() => {
-    if (isAuthenticated && session?.user?.id && dataLoaded) {
+    if (activeTab === 'profile' && session?.user?.id) {
+      setLoadingAssets(true);
+      getUserAssets(session.user.id).then(assets => {
+        setGeneratedAssets(assets);
+        setLoadingAssets(false);
+      });
+    }
+  }, [activeTab, session]);
+
+  useEffect(() => {
+    if (isAuthenticated && session?.user?.id && dataLoaded && !setupRequired) {
       const timeoutId = setTimeout(async () => {
         try {
           await saveFinancialData(session.user.id, state);
         } catch (error: any) {
-          console.error("Falha ao sincronizar:", error.message || error);
+          const errMsg = error?.message || String(error);
+          console.error("Falha ao sincronizar:", errMsg);
+          if (errMsg.includes('financial_data') || error?.code === 'PGRST205') {
+            setSetupRequired(true);
+          }
         }
       }, 2000); 
       return () => clearTimeout(timeoutId);
     }
-  }, [state, isAuthenticated, session, dataLoaded]);
+  }, [state, isAuthenticated, session, dataLoaded, setupRequired]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -306,7 +342,7 @@ const App: React.FC = () => {
                 {isSyncing && (
                   <div className="flex items-center space-x-2 text-[10px] font-black uppercase text-indigo-500 animate-pulse">
                     <RefreshCw size={12} className="animate-spin" />
-                    <span>Syncing Cloud</span>
+                    <span>Sincronizando</span>
                   </div>
                 )}
               </div>
@@ -355,6 +391,30 @@ const App: React.FC = () => {
           )}
 
           <main className="max-w-7xl mx-auto px-4 mt-6 flex-1 w-full lg:mt-8">
+            {setupRequired && (
+              <div className="mb-8 p-6 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-[2.5rem] flex flex-col space-y-6 animate-fade-in shadow-xl">
+                <div className="flex flex-col md:flex-row items-center gap-6">
+                  <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-3xl flex items-center justify-center shrink-0">
+                    <Database className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1 space-y-2 text-center md:text-left">
+                    <h3 className="text-xl font-black text-amber-900 dark:text-amber-100 uppercase tracking-tight">Primeira Configuração Necessária</h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
+                      Sua instância do Supabase ainda não possui as tabelas de armazenamento. 
+                      Para sincronizar seus dados, você precisa executar um script SQL no seu painel do Supabase.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => fetchData(session?.user?.id)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center space-x-2 shadow-lg shadow-amber-200 dark:shadow-none transition-all active:scale-95 shrink-0"
+                  >
+                    <RefreshCw size={18} />
+                    <span>Já configurei</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'inputs' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
                 <section className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
@@ -362,7 +422,7 @@ const App: React.FC = () => {
                   <div className="space-y-4">
                     <NumberInput label="Renda Fixa" value={state.income.fixed[currentMonthIdx]} onChange={(val) => updateField('income', 'fixed', val)} icon={<Calendar className="w-4 h-4" />} />
                     <NumberInput label="Renda Extra" value={state.income.extra[currentMonthIdx]} onChange={(val) => updateField('income', 'extra', val)} icon={<Sparkles className="w-4 h-4" />} />
-                    <div className="pt-2 border-t dark:border-slate-800"><NumberInput label="Investimentos" value={state.income.investments[currentMonthIdx]} onChange={(val) => updateField('income', 'investments', val)} icon={<Target className="w-4 h-4 text-indigo-500" />} /></div>
+                    <div className="pt-2 border-t dark:border-slate-800"><NumberInput label="Investimentos" value={state.income.investments[currentMonthIdx]} onChange={(val) => updateField('income', 'investments', val)} tooltip="Este valor será deduzido da sua renda bruta para calcular o saldo líquido disponível para gastos." icon={<Target className="w-4 h-4 text-indigo-500" />} /></div>
                   </div>
                 </section>
                 <section className="bg-white dark:bg-darkCard p-6 rounded-[2rem] border border-slate-200 dark:border-darkBorder shadow-sm">
@@ -414,17 +474,17 @@ const App: React.FC = () => {
                             <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
                             <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
                             <Tooltip cursor={{fill: 'rgba(99, 102, 241, 0.03)'}} contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }} formatter={(value: any) => formatCurrency(value)} />
-                            <Bar dataKey="income" radius={[4, 4, 0, 0]} barSize={25}>
+                            <Bar name="Renda" dataKey="income" radius={[4, 4, 0, 0]} barSize={25}>
                               {results.allMonthlyResults.map((entry, index) => (
                                 <Cell key={`cell-i-${index}`} fill={index === currentMonthIdx ? '#6366f1' : '#c7d2fe'} />
                               ))}
                             </Bar>
-                            <Bar dataKey="expense" radius={[4, 4, 0, 0]} barSize={25}>
+                            <Bar name="Despesa" dataKey="expense" radius={[4, 4, 0, 0]} barSize={25}>
                               {results.allMonthlyResults.map((entry, index) => (
                                 <Cell key={`cell-e-${index}`} fill={index === currentMonthIdx ? '#f59e0b' : '#fde68a'} />
                               ))}
                             </Bar>
-                            <Line type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} />
+                            <Line name="Saldo" type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       </div>
@@ -447,7 +507,7 @@ const App: React.FC = () => {
                             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
                             <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
                             <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none' }} />
-                            <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
+                            <Area name="Patrimônio" type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
@@ -526,7 +586,7 @@ const App: React.FC = () => {
                         </ResponsiveContainer>
                         <div className="absolute top-[45%] left-1/2 -translate-x-1/2 text-center">
                           <p className="text-5xl font-black text-slate-900 dark:text-white leading-none">{results.savingsRate}%</p>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Saving Rate</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Taxa de Poupança</p>
                         </div>
                       </div>
                    </div>
@@ -538,9 +598,9 @@ const App: React.FC = () => {
                           <BarChart data={results.periodResults}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                            <Tooltip />
-                            <Bar dataKey="income" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="expense" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                            <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                            <Bar name="Renda" dataKey="income" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            <Bar name="Despesa" dataKey="expense" fill="#fbbf24" radius={[4, 4, 0, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -567,25 +627,137 @@ const App: React.FC = () => {
             )}
 
             {activeTab === 'profile' && (
-              <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-12">
+              <div className="max-w-7xl mx-auto space-y-12 animate-fade-in pb-12">
+                {/* Header do Perfil */}
                 <div className="bg-white dark:bg-darkCard rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm overflow-hidden">
-                  <div className="h-48 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-800 relative">
-                     <div className="absolute -bottom-16 left-8">
-                        <div className="w-32 h-32 rounded-[2.5rem] bg-white dark:bg-darkCard p-2 shadow-2xl border border-white/20">
-                           <div className="w-full h-full bg-slate-100 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center text-indigo-600 dark:text-indigo-400"><User size={64} /></div>
+                  <div className="h-56 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-800 relative">
+                    <div className="absolute inset-0 opacity-20 pointer-events-none">
+                      <div className="absolute top-10 left-10 w-32 h-32 bg-white rounded-full blur-3xl animate-pulse"></div>
+                      <div className="absolute bottom-10 right-10 w-48 h-48 bg-emerald-400 rounded-full blur-3xl opacity-50"></div>
+                    </div>
+                    <div className="absolute -bottom-16 left-12">
+                      <div className="w-40 h-40 rounded-[3rem] bg-white dark:bg-darkCard p-2.5 shadow-2xl border border-white/20">
+                        <div className="w-full h-full bg-slate-100 dark:bg-slate-800 rounded-[2.5rem] flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                          <User size={80} />
                         </div>
-                     </div>
-                  </div>
-                  <div className="pt-20 px-8 pb-10">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                      <div>
-                        <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{displayName}</h2>
-                        <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400 mt-1 font-medium"><Mail size={16} /><span>{session?.user?.email}</span></div>
                       </div>
-                      <button onClick={handleLogout} className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-6 py-3 rounded-2xl font-bold transition-all hover:bg-rose-100 dark:hover:bg-rose-900/30 border border-rose-100 dark:border-rose-900/30"><LogOut size={18} /><span>Sair</span></button>
+                    </div>
+                  </div>
+                  <div className="pt-20 px-12 pb-12">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                      <div>
+                        <div className="flex items-center space-x-3">
+                          <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{displayName}</h2>
+                          <div className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            Membro Premium
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3 text-slate-500 dark:text-slate-400 mt-2 font-medium">
+                          <div className="flex items-center space-x-1"><Mail size={16} /><span>{session?.user?.email}</span></div>
+                          <div className="h-1 w-1 bg-slate-300 rounded-full"></div>
+                          <div className="flex items-center space-x-1"><CalendarDays size={16} /><span>Membro desde 2024</span></div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <button onClick={() => setActiveTab('annual')} className="px-6 py-3.5 rounded-2xl font-bold bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-darkBorder hover:bg-slate-100 transition-all flex items-center space-x-2">
+                          <Activity size={18} />
+                          <span>Estatísticas</span>
+                        </button>
+                        <button onClick={handleLogout} className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-6 py-3.5 rounded-2xl font-bold transition-all hover:bg-rose-100 dark:hover:bg-rose-900/30 border border-rose-100 dark:border-rose-900/30 active:scale-95 shadow-lg shadow-rose-100 dark:shadow-none">
+                          <LogOut size={18} />
+                          <span>Sair</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Grid de Widgets do Perfil */}
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                  {/* Performance Anual Rápida */}
+                  <div className="bg-slate-900 dark:bg-slate-950 p-8 rounded-[3rem] text-white shadow-2xl xl:col-span-1 flex flex-col justify-between overflow-hidden relative group">
+                    <div className="absolute -top-10 -right-10 opacity-10 group-hover:scale-110 transition-transform duration-700">
+                      <Trophy size={200} />
+                    </div>
+                    <div className="relative z-10">
+                      <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500 mb-8">Performance Anual</h3>
+                      <div className="space-y-6">
+                        <div>
+                          <p className="text-[11px] text-slate-500 uppercase font-black tracking-widest mb-1">Patrimônio Gerado</p>
+                          <p className="text-4xl font-black text-emerald-400">{formatCurrency(results.annualBalance)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-500 uppercase font-black tracking-widest mb-1">Taxa Média de Poupança</p>
+                          <div className="flex items-end space-x-3">
+                            <p className="text-4xl font-black">{results.savingsRate}%</p>
+                            <div className="pb-1.5 flex space-x-1">
+                              {[1, 2, 3, 4, 5].map(i => (
+                                <div key={i} className={`w-1.5 h-6 rounded-full ${i/5 * 100 <= results.savingsRate ? 'bg-indigo-500' : 'bg-slate-800'}`}></div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-12 p-4 bg-white/5 rounded-2xl border border-white/5 relative z-10">
+                      <p className="text-[10px] font-medium text-slate-400 leading-relaxed italic">
+                        "Sua disciplina financeira este ano está {results.savingsRate > 20 ? 'acima da média do mercado' : 'em trajetória de crescimento'}. Continue focando na otimização de custos fixos."
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Configurações em duas colunas */}
+                  <div className="xl:col-span-2">
+                    <ProfileSettings initialName={displayName} email={session?.user?.email} />
+                  </div>
+                </div>
+
+                {/* Galeria de Visões */}
+                <section className="space-y-8 pt-8 border-t border-slate-200 dark:border-darkBorder">
+                  <div className="flex items-center justify-between px-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center">
+                        <History className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Galeria de Futuro</h3>
+                        <p className="text-sm text-slate-500 font-medium">Visualizações estratégicas geradas pela IA.</p>
+                      </div>
+                    </div>
+                    {loadingAssets && <Loader2 className="animate-spin text-slate-400" size={20} />}
+                  </div>
+
+                  {generatedAssets.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                      {generatedAssets.map((asset) => (
+                        <div key={asset.id} className="group relative bg-white dark:bg-darkCard rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm overflow-hidden hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2">
+                          <div className="aspect-[4/5] overflow-hidden bg-slate-100 dark:bg-slate-800">
+                            <img src={asset.image_url} alt={asset.prompt} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent p-8 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                            <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em] mb-3">{new Date(asset.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</p>
+                            <p className="text-sm text-white font-medium line-clamp-4 leading-relaxed italic">"{asset.prompt}"</p>
+                          </div>
+                          <div className="absolute top-6 right-6 bg-white/20 backdrop-blur-xl p-3 rounded-2xl border border-white/20 text-white shadow-2xl scale-0 group-hover:scale-100 transition-transform duration-500">
+                            <ImageIcon size={20} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-white dark:bg-darkCard border-2 border-dashed border-slate-200 dark:border-darkBorder rounded-[4rem] p-24 flex flex-col items-center justify-center text-center">
+                      <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800/50 rounded-[2.5rem] flex items-center justify-center mb-8 text-slate-300">
+                        <ImageIcon size={48} />
+                      </div>
+                      <h4 className="text-xl font-black text-slate-900 dark:text-white">Seu quadro de sonhos está limpo</h4>
+                      <p className="text-sm text-slate-500 max-w-sm mt-4 font-medium leading-relaxed">Use o motor de Inteligência de Mercado para visualizar o impacto das suas decisões financeiras no futuro.</p>
+                      <button onClick={() => setActiveTab('strategy')} className="mt-10 bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-bold flex items-center space-x-2 shadow-2xl shadow-indigo-200 dark:shadow-none transition-all active:scale-95">
+                        <Sparkles size={20} />
+                        <span>Gerar Primeira Visão</span>
+                      </button>
+                    </div>
+                  )}
+                </section>
               </div>
             )}
           </main>

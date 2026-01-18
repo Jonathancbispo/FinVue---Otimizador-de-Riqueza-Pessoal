@@ -6,6 +6,13 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const handleError = (error: any, context: string) => {
+  const message = error?.message || 'Erro desconhecido';
+  const code = error?.code || 'N/A';
+  console.error(`[Supabase ${context}] Code: ${code} - Message: ${message}`);
+  return { message, code, full: error };
+};
+
 export const saveFinancialData = async (userId: string, data: any) => {
   const { error } = await supabase
     .from('financial_data')
@@ -16,15 +23,7 @@ export const saveFinancialData = async (userId: string, data: any) => {
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id,year' });
 
-  if (error) {
-    console.error("Supabase Error Details:", {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-      code: error.code
-    });
-    throw error;
-  }
+  if (error) throw handleError(error, 'Save');
 };
 
 export const loadFinancialData = async (userId: string) => {
@@ -33,12 +32,9 @@ export const loadFinancialData = async (userId: string) => {
     .select('data')
     .eq('user_id', userId)
     .eq('year', new Date().getFullYear())
-    .maybeSingle(); // Usando maybeSingle para evitar erro PGRST116 quando não há dados
+    .maybeSingle();
 
-  if (error) {
-    console.error("Load Error:", error);
-    return null;
-  }
+  if (error) throw handleError(error, 'Load');
   return data?.data || null;
 };
 
@@ -52,7 +48,18 @@ export const saveGeneratedAsset = async (userId: string, prompt: string, imageUr
       category
     });
   
-  if (error) throw error;
+  if (error) throw handleError(error, 'Asset Save');
+};
+
+export const getUserAssets = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('generated_assets')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw handleError(error, 'Asset Load');
+  return data || [];
 };
 
 export const updateUserProfile = async (displayName: string) => {

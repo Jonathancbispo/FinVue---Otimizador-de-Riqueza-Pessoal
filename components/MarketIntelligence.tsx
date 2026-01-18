@@ -13,7 +13,9 @@ import {
   ChevronRight,
   LineChart,
   Sparkles,
-  Image as ImageIcon
+  Image as ImageIcon,
+  AlertTriangle,
+  RefreshCcw
 } from 'lucide-react';
 import { getMarketIntelligence } from '../services/geminiService';
 import { GoogleGenAI } from "@google/genai";
@@ -21,7 +23,7 @@ import { saveGeneratedAsset } from '../services/supabaseClient';
 
 interface ForecastData {
   outlook: string; 
-  risk: 'low' | 'medium' | 'high';
+  risk: string;
   portfolio: string[];
 }
 
@@ -38,22 +40,37 @@ interface MarketData {
 const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }> = ({ newsHeadlines, userId }) => {
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
 
   const runAnalysis = async () => {
-    if (newsHeadlines.length === 0) return;
+    if (!newsHeadlines || newsHeadlines.length === 0) return;
     setLoading(true);
-    const result = await getMarketIntelligence(newsHeadlines);
-    if (result) setData(result);
-    setLoading(false);
+    setError(false);
+    try {
+      const result = await getMarketIntelligence(newsHeadlines);
+      if (result) {
+        const s = result.sentiment.toLowerCase();
+        let color: 'emerald' | 'rose' | 'slate' = 'slate';
+        if (s.includes('otimista')) color = 'emerald';
+        else if (s.includes('pessimista')) color = 'rose';
+        
+        setData({ ...result, sentimentColor: color });
+      } else {
+        setError(true);
+      }
+    } catch (err) {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const generateWealthVision = async () => {
     if (!data || !userId) return;
     setIsGeneratingImage(true);
     
-    // Always use process.env.API_KEY directly as a named parameter.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const prompt = `A futuristic, high-tech, cinematic masterpiece visualization of financial success and growth. 
     Theme: ${data.sentiment}. Concept: ${data.explanation}. 
@@ -66,11 +83,12 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
       });
 
       let imageUrl = null;
-      // Iterating through all parts to find the image part as recommended.
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
+      if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+            break;
+          }
         }
       }
 
@@ -86,17 +104,16 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
   };
 
   useEffect(() => {
-    if (newsHeadlines.length > 0 && !data) {
+    if (newsHeadlines && newsHeadlines.length > 0 && !data && !loading && !error) {
       runAnalysis();
     }
   }, [newsHeadlines]);
 
   const getRiskBadge = (risk: string) => {
-    switch (risk) {
-      case 'high': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400';
-      case 'medium': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
-      default: return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-    }
+    const r = risk?.toLowerCase() || '';
+    if (r.includes('alto') || r.includes('high')) return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400';
+    if (r.includes('médio') || r.includes('medium')) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
   };
 
   const ForecastCard = ({ title, icon: Icon, data, accentColor }: { title: string, icon: any, data: ForecastData, accentColor: string }) => (
@@ -147,10 +164,38 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
     );
   }
 
+  if (error) {
+    return (
+      <div className="bg-white dark:bg-darkCard p-8 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder flex flex-col items-center justify-center space-y-4 min-h-[450px] text-center">
+        <AlertTriangle className="w-12 h-12 text-amber-500" />
+        <div>
+          <h4 className="font-bold text-slate-900 dark:text-white">Ops! Falha na Análise</h4>
+          <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">Não conseguimos processar os dados de mercado no momento. Tente novamente em alguns instantes.</p>
+        </div>
+        <button onClick={runAnalysis} className="flex items-center space-x-2 bg-indigo-600 text-white px-6 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
+          <RefreshCcw size={14} />
+          <span>Tentar Novamente</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (!newsHeadlines || newsHeadlines.length === 0) {
+    return (
+      <div className="bg-white dark:bg-darkCard p-8 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder flex flex-col items-center justify-center space-y-4 min-h-[450px] text-center opacity-60">
+        <Zap className="w-12 h-12 text-indigo-400" />
+        <div>
+          <h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-widest text-xs">Aguardando Dados</h4>
+          <p className="text-[10px] text-slate-500 mt-1 max-w-xs mx-auto uppercase font-bold tracking-tighter">Carregando manchetes globais para iniciar processamento estratégico...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!data) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <section className="bg-white dark:bg-darkCard p-6 rounded-[2.5rem] border border-slate-200 dark:border-darkBorder shadow-sm overflow-hidden relative group">
         <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
           {data.sentimentColor === 'rose' ? <TrendingDown size={120} /> : <TrendingUp size={120} />}
@@ -180,11 +225,16 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
           <div className="flex space-x-2">
             <button 
               onClick={generateWealthVision}
-              disabled={isGeneratingImage}
-              className="p-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 shadow-lg shadow-emerald-100 dark:shadow-none transition-all disabled:opacity-50"
+              disabled={isGeneratingImage || !userId}
+              className="p-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 shadow-lg shadow-emerald-100 dark:shadow-none transition-all disabled:opacity-50 relative overflow-hidden group/btn"
               title="Gerar Visão de Riqueza"
             >
               {isGeneratingImage ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
+              {isGeneratingImage && (
+                <div className="absolute inset-0 bg-emerald-600/50 flex items-center justify-center">
+                  <span className="sr-only">Gerando...</span>
+                </div>
+              )}
             </button>
             <button 
               onClick={runAnalysis}
@@ -198,13 +248,13 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
 
         {generatedImage && (
           <div className="mt-8 rounded-[2rem] overflow-hidden border-4 border-indigo-500/20 shadow-2xl animate-in zoom-in-95 duration-500">
-            <img src={generatedImage} alt="Wealth Vision" className="w-full h-auto object-cover" />
+            <img src={generatedImage} alt="Visão de Riqueza" className="w-full h-auto object-cover max-h-[500px]" />
             <div className="bg-indigo-600/90 backdrop-blur-md p-4 flex items-center justify-between text-white">
               <div className="flex items-center space-x-2">
                 <ImageIcon size={16} />
-                <span className="text-xs font-black uppercase tracking-widest">Asset Salvo na Nuvem</span>
+                <span className="text-xs font-black uppercase tracking-widest text-[9px]">Asset Salvo na Galeria de Perfil</span>
               </div>
-              <p className="text-[10px] font-medium opacity-80 italic">Criado via FinVue Brain</p>
+              <p className="text-[9px] font-medium opacity-80 italic">Processado via FinVue Brain Core</p>
             </div>
           </div>
         )}
@@ -227,7 +277,7 @@ const MarketIntelligence: React.FC<{ newsHeadlines: string[], userId?: string }>
       <div className="bg-indigo-600/5 dark:bg-indigo-900/10 p-5 rounded-[2rem] flex items-start space-x-4 border border-indigo-100 dark:border-indigo-900/30">
         <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-[0.1em]">Disclaimer de Inteligência</p>
+          <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-[0.1em]">Aviso Legal de Inteligência</p>
           <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">As sugestões de carteira são baseadas em análise algorítmica de notícias em tempo real e servem apenas como referência educacional. Consulte sempre um assessor de investimentos certificado.</p>
         </div>
       </div>
