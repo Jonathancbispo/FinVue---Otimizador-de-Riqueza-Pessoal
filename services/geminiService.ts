@@ -21,64 +21,56 @@ export const getFinancialAdvice = async (
   const currentIncome = state.income.fixed[currentMonthIdx] + state.income.extra[currentMonthIdx];
   const currentInvestments = state.income.investments[currentMonthIdx];
 
-  const prompt = `
-    Como um consultor financeiro inteligente, analise o contexto completo deste usuário para o mês de ${currentMonthName}:
-    - Renda Bruta: R$${currentIncome}
-    - Valor Investido: R$${currentInvestments}
-    - Gastos Totais: R$${monthlyRes.expense}
-    - Saldo Final: R$${balance}
-    Responda com apenas UMA frase curta, impactante e motivadora em Português do Brasil.
-  `;
+  const prompt = `Analise: Mês ${currentMonthName}, Renda R$${currentIncome}, Investido R$${currentInvestments}, Gasto R$${monthlyRes.expense}, Saldo R$${balance}. Responda com 1 frase motivadora curta em Português do Brasil.`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
+      config: { thinkingConfig: { thinkingBudget: 0 } }
     });
-    return response.text || "Mantenha o foco em seus objetivos financeiros!";
+    return response.text || "Foco no seu futuro financeiro!";
   } catch (error) {
-    return "Analise seus gastos fixos para garantir estabilidade no próximo mês.";
+    return "Consistência é a chave para a liberdade financeira.";
   }
 };
 
 export const getMarketIntelligence = async (newsHeadlines: string[]): Promise<any> => {
-  if (!newsHeadlines || newsHeadlines.length === 0) return null;
+  const context = newsHeadlines && newsHeadlines.length > 0 
+    ? `Notícias Atuais: ${newsHeadlines.slice(0, 5).join(" | ")}` 
+    : "Tendências econômicas globais para o investidor brasileiro em 2025";
 
-  const prompt = `
-    Você é um estrategista de investimentos sênior. Analise estas manchetes e forneça uma visão estratégica consolidada:
-    ${newsHeadlines.join(" | ")}
-
-    REGRAS:
-    - O sentimento deve ser EXATAMENTE: "Otimista", "Pessimista" ou "Neutro".
-    - Todas as perspectivas e riscos devem estar em Português do Brasil.
-    - Seja direto e profissional.
-  `;
+  // Instrução explícita de idioma e velocidade
+  const prompt = `Aja como analista financeiro sênior. Analise o contexto e retorne um JSON estrito. 
+  IMPORTANTE: Todos os textos explicativos, nomes de ativos no portfólio e descrições DEVEM estar em PORTUGUÊS DO BRASIL.
+  Contexto: ${context}`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
+        thinkingConfig: { thinkingBudget: 0 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            sentiment: { type: Type.STRING, description: 'Sentimento único: Otimista, Pessimista ou Neutro.' },
-            explanation: { type: Type.STRING, description: 'Resumo macro de até 2 frases.' },
+            sentiment: { type: Type.STRING, description: 'Ex: Otimista, Pessimista, Estável' },
+            explanation: { type: Type.STRING, description: 'Explicação curta em português' },
             shortTerm: {
               type: Type.OBJECT,
               properties: {
-                outlook: { type: Type.STRING, description: 'Perspectiva de 0-3 meses.' },
-                risk: { type: Type.STRING, description: 'Nível: Baixo, Médio ou Alto.' },
-                portfolio: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Lista de ativos recomendados.' }
+                outlook: { type: Type.STRING, description: 'Perspectiva em português' },
+                risk: { type: Type.STRING, description: 'Nível de risco: Baixo, Médio ou Alto' },
+                portfolio: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Lista de ativos em português' }
               },
               required: ['outlook', 'risk', 'portfolio']
             },
             mediumTerm: {
               type: Type.OBJECT,
               properties: {
-                outlook: { type: Type.STRING, description: 'Perspectiva de 3-12 meses.' },
-                risk: { type: Type.STRING, description: 'Nível: Baixo, Médio ou Alto.' },
+                outlook: { type: Type.STRING },
+                risk: { type: Type.STRING },
                 portfolio: { type: Type.ARRAY, items: { type: Type.STRING } }
               },
               required: ['outlook', 'risk', 'portfolio']
@@ -86,13 +78,13 @@ export const getMarketIntelligence = async (newsHeadlines: string[]): Promise<an
             longTerm: {
               type: Type.OBJECT,
               properties: {
-                outlook: { type: Type.STRING, description: 'Perspectiva de 1-5 anos.' },
-                risk: { type: Type.STRING, description: 'Nível: Baixo, Médio ou Alto.' },
+                outlook: { type: Type.STRING },
+                risk: { type: Type.STRING },
                 portfolio: { type: Type.ARRAY, items: { type: Type.STRING } }
               },
               required: ['outlook', 'risk', 'portfolio']
             },
-            drivers: { type: Type.ARRAY, items: { type: Type.STRING }, description: '3 fatores influenciadores.' }
+            drivers: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Fatores determinantes em português' }
           },
           required: ['sentiment', 'explanation', 'shortTerm', 'mediumTerm', 'longTerm', 'drivers']
         }
@@ -110,11 +102,9 @@ export const chatWithAi = async (
   fullData: FinancialState,
   history: { role: 'user' | 'model'; text: string }[]
 ): Promise<string> => {
-  const systemInstruction = `
-    Você é o Agente FinVue, um especialista em análise financeira pessoal e investimentos.
-    Você tem acesso aos dados reais do usuário: ${JSON.stringify(fullData)}.
-    Sempre responda em Português do Brasil de forma estratégica, empática e objetiva.
-  `;
+  const systemInstruction = `Você é o FinVue Voice. Especialista em finanças pessoais.
+  Responda SEMPRE em Português do Brasil de forma extremamente direta. 
+  Dados atuais do usuário: ${JSON.stringify(fullData)}.`;
 
   const contents = history.map(msg => ({
     role: msg.role,
@@ -128,15 +118,15 @@ export const chatWithAi = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: contents,
       config: {
         systemInstruction,
-        thinkingConfig: { thinkingBudget: 32768 }
+        thinkingConfig: { thinkingBudget: 0 }
       },
     });
-    return response.text || "Desculpe, não consegui processar sua dúvida agora.";
+    return response.text || "Não consegui processar sua solicitação.";
   } catch (error) {
-    return "Houve um erro ao processar sua consulta.";
+    return "Erro na conexão com o servidor de IA.";
   }
 };

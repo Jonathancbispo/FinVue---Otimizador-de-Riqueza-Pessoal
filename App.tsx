@@ -310,15 +310,6 @@ const App: React.FC = () => {
     }
   };
 
-  const chartData = [
-    { name: 'Fixo', value: state.expenses.fixed[currentMonthIdx] },
-    { name: 'Cartão', value: state.expenses.creditCard[currentMonthIdx] },
-    { name: 'Compras Mensais', value: state.expenses.monthlyPurchases[currentMonthIdx] },
-    { name: 'Açougue', value: state.expenses.butcher[currentMonthIdx] },
-    { name: 'Semanal', value: state.expenses.weekly[currentMonthIdx] },
-    { name: 'Outras', value: state.expenses.otherExpenses[currentMonthIdx] },
-  ].filter(d => d.value > 0);
-
   const formatCurrency = (num: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
   const formatCompact = (num: number) => new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(num);
 
@@ -448,7 +439,7 @@ const App: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <SummaryCard title="Renda Líquida" value={results.allMonthlyResults[currentMonthIdx].income} type="income" subtitle={MONTHS[currentMonthIdx]} />
                     <SummaryCard title="Despesa Total" value={results.allMonthlyResults[currentMonthIdx].expense} type="expense" subtitle={MONTHS[currentMonthIdx]} />
-                    <SummaryCard title="Saldo do Mês" value={results.allMonthlyResults[currentMonthIdx].balance} type={results.allMonthlyResults[currentMonthIdx].balance >= 0 ? 'positive' : 'negative'} subtitle={MONTHS[currentMonthIdx]} />
+                    <SummaryCard title="Saldo do Mês" value={results.allMonthlyResults[currentMonthIdx].balance} type="balance" subtitle={MONTHS[currentMonthIdx]} />
                     <SummaryCard title="Valor Investido" value={results.allMonthlyResults[currentMonthIdx].invested} type="positive" subtitle={MONTHS[currentMonthIdx]} />
                   </div>
                 </div>
@@ -461,10 +452,10 @@ const App: React.FC = () => {
                           <BarChart3 className="w-4 h-4 mr-2 text-indigo-500" />
                           Fluxo Mensal vs Lucratividade
                         </h3>
-                        <div className="flex items-center space-x-3 text-[10px] font-bold uppercase tracking-widest">
-                          <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-slate-400">Renda</span></div>
-                          <div className="flex items-center space-x-1"><div className="w-2 h-2 rounded-full bg-rose-500"></div><span className="text-slate-400">Gasto</span></div>
-                          <div className="flex items-center space-x-1"><div className="w-2 h-2 bg-indigo-500"></div><span className="text-slate-400">Saldo</span></div>
+                        <div className="flex items-center space-x-3 text-[10px] font-black uppercase tracking-widest">
+                          <div className="flex items-center space-x-1"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]"></div><span className="text-emerald-600 dark:text-emerald-400">Renda</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.7)]"></div><span className="text-rose-600 dark:text-rose-400">Gasto</span></div>
+                          <div className="flex items-center space-x-1"><div className="w-3 h-0.5 bg-indigo-500"></div><span className="text-indigo-600 dark:text-indigo-400">Saldo</span></div>
                         </div>
                       </div>
                       <div className="w-full flex-grow min-h-[300px] h-[35vh] max-h-[500px]">
@@ -473,46 +464,49 @@ const App: React.FC = () => {
                             <defs>
                               <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.9}/>
-                                <stop offset="100%" stopColor="#34d399" stopOpacity={0.4}/>
-                              </linearGradient>
-                              <linearGradient id="gradIncomeSelected" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#059669" stopOpacity={1}/>
-                                <stop offset="100%" stopColor="#10b981" stopOpacity={0.8}/>
+                                <stop offset="100%" stopColor="#10b981" stopOpacity={0.2}/>
                               </linearGradient>
                               <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.9}/>
-                                <stop offset="100%" stopColor="#fb7185" stopOpacity={0.4}/>
+                                <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.2}/>
                               </linearGradient>
-                              <linearGradient id="gradExpenseSelected" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#e11d48" stopOpacity={1}/>
-                                <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.8}/>
-                              </linearGradient>
+                              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                              </filter>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" opacity={0.5} />
-                            <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
-                            <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#1e293b" : "#f1f5f9"} />
+                            <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
+                            <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
                             <Tooltip 
-                              cursor={{fill: 'rgba(99, 102, 241, 0.05)'}} 
-                              contentStyle={{ borderRadius: '1.2rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }} 
-                              formatter={(value: any) => formatCurrency(value)} 
+                              cursor={{fill: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'}} 
+                              contentStyle={{ borderRadius: '1.2rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.15)', padding: '12px' }} 
+                              itemStyle={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                              formatter={(value: any, name: string) => {
+                                const colorMap: any = { 'Renda': '#10b981', 'Despesa': '#f43f5e', 'Saldo': '#6366f1' };
+                                return [
+                                  <span style={{ color: colorMap[name] || '#6366f1' }}>{formatCurrency(value)}</span>,
+                                  <span style={{ color: colorMap[name] || '#6366f1' }}>{name}</span>
+                                ];
+                              }} 
                             />
-                            <Bar name="Renda" dataKey="income" radius={[6, 6, 0, 0]} barSize={22}>
+                            <Bar name="Renda" dataKey="income" radius={[6, 6, 0, 0]} barSize={20}>
                               {results.allMonthlyResults.map((entry, index) => (
                                 <Cell 
                                   key={`cell-i-${index}`} 
-                                  fill={index === currentMonthIdx ? 'url(#gradIncomeSelected)' : 'url(#gradIncome)'} 
+                                  fill={index === currentMonthIdx ? '#10b981' : 'url(#gradIncome)'} 
                                   stroke={index === currentMonthIdx ? '#059669' : 'none'}
-                                  strokeWidth={1}
+                                  strokeWidth={index === currentMonthIdx ? 2 : 0}
                                 />
                               ))}
                             </Bar>
-                            <Bar name="Despesa" dataKey="expense" radius={[6, 6, 0, 0]} barSize={22}>
+                            <Bar name="Despesa" dataKey="expense" radius={[6, 6, 0, 0]} barSize={20}>
                               {results.allMonthlyResults.map((entry, index) => (
                                 <Cell 
                                   key={`cell-e-${index}`} 
-                                  fill={index === currentMonthIdx ? 'url(#gradExpenseSelected)' : 'url(#gradExpense)'} 
+                                  fill={index === currentMonthIdx ? '#f43f5e' : 'url(#gradExpense)'} 
                                   stroke={index === currentMonthIdx ? '#e11d48' : 'none'}
-                                  strokeWidth={1}
+                                  strokeWidth={index === currentMonthIdx ? 2 : 0}
                                 />
                               ))}
                             </Bar>
@@ -522,8 +516,18 @@ const App: React.FC = () => {
                               dataKey="balance" 
                               stroke="#6366f1" 
                               strokeWidth={4} 
-                              dot={{ r: 5, fill: '#6366f1', strokeWidth: 3, stroke: '#fff' }} 
+                              dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: isDarkMode ? '#0f172a' : '#fff' }} 
                               activeDot={{ r: 7, strokeWidth: 0 }} 
+                              filter="url(#glow)"
+                            />
+                            <Legend 
+                              verticalAlign="top" 
+                              align="right" 
+                              wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.1em' }}
+                              formatter={(value) => {
+                                const colors: any = { 'Renda': '#10b981', 'Despesa': '#f43f5e', 'Saldo': '#6366f1' };
+                                return <span style={{ color: colors[value] }}>{value}</span>;
+                              }}
                             />
                           </ComposedChart>
                         </ResponsiveContainer>
@@ -540,13 +544,16 @@ const App: React.FC = () => {
                           <AreaChart data={results.cumulativeResults.slice(0, currentMonthIdx + 1)}>
                             <defs>
                               <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15}/>
+                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                            <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10}} />
-                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none' }} />
+                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
+                            <YAxis axisLine={false} tickLine={false} tickFormatter={formatCompact} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
+                            <Tooltip 
+                              contentStyle={{ borderRadius: '1rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff' }} 
+                              itemStyle={{ color: '#6366f1', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                            />
                             <Area name="Patrimônio" type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
                           </AreaChart>
                         </ResponsiveContainer>
@@ -561,30 +568,44 @@ const App: React.FC = () => {
                         Gastos do Mês de {MONTHS[currentMonthIdx]}
                       </h3>
                       <div className="w-full h-[220px]">
-                        {chartData.length > 0 ? (
+                        {results.allMonthlyResults[currentMonthIdx].expense > 0 ? (
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                              <Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={8} dataKey="value" stroke="none">
-                                {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                              <Pie 
+                                data={[
+                                  { name: 'Fixo', value: state.expenses.fixed[currentMonthIdx] },
+                                  { name: 'Cartão', value: state.expenses.creditCard[currentMonthIdx] },
+                                  { name: 'Compras', value: state.expenses.monthlyPurchases[currentMonthIdx] },
+                                  { name: 'Açougue', value: state.expenses.butcher[currentMonthIdx] },
+                                  { name: 'Semanal', value: state.expenses.weekly[currentMonthIdx] },
+                                  { name: 'Outras', value: state.expenses.otherExpenses[currentMonthIdx] },
+                                ].filter(d => d.value > 0)} 
+                                cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={8} dataKey="value" stroke="none"
+                              >
+                                {COLORS.map((color, index) => <Cell key={`cell-${index}`} fill={color} />)}
                               </Pie>
-                              <Tooltip />
+                              <Tooltip 
+                                itemStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                                formatter={(value: number) => formatCurrency(value)}
+                              />
                             </PieChart>
                           </ResponsiveContainer>
                         ) : (
                           <div className="flex flex-col items-center justify-center h-full opacity-20">
                             <LayoutDashboard size={40} className="mb-2" />
-                            <p className="text-[10px] font-bold uppercase">Sem gastos</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest">Sem gastos</p>
                           </div>
                         )}
                       </div>
                     </div>
                     
-                    <div className="bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
-                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Meta Anual (Total 12 meses)</h3>
-                      <div className="space-y-4">
-                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Expectativa Bruta</p><p className="text-xl font-bold">{formatCurrency(results.annualGross)}</p></div>
-                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Gasto Total Previsto</p><p className="text-xl font-bold text-rose-400">{formatCurrency(results.annualExpenses)}</p></div>
-                        <div className="pt-4 border-t border-white/10"><p className="text-[10px] text-indigo-400 uppercase font-bold">Projeção Final</p><p className={`text-2xl font-black ${results.annualBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(results.annualBalance)}</p></div>
+                    <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-6">Meta Anual Estimada</h3>
+                      <div className="space-y-6 relative z-10">
+                        <div><p className="text-[9px] text-emerald-500/60 uppercase font-black tracking-widest mb-1">Renda Bruta Total</p><p className="text-2xl font-black text-emerald-400">{formatCurrency(results.annualGross)}</p></div>
+                        <div><p className="text-[9px] text-rose-500/60 uppercase font-black tracking-widest mb-1">Gasto Total Previsto</p><p className="text-2xl font-black text-rose-400">{formatCurrency(results.annualExpenses)}</p></div>
+                        <div className="pt-6 border-t border-white/10"><p className="text-[9px] text-indigo-400/60 uppercase font-black tracking-widest mb-1">Projeção de Patrimônio</p><p className={`text-3xl font-black ${results.annualBalance >= 0 ? 'text-indigo-400' : 'text-rose-400'}`}>{formatCurrency(results.annualBalance)}</p></div>
                       </div>
                     </div>
                   </div>
@@ -612,7 +633,7 @@ const App: React.FC = () => {
                    <SummaryCard title="Renda no Período" value={results.pGross} type="income" subtitle={selectedPeriod.label} />
                    <SummaryCard title="Gasto no Período" value={results.pExpenses} type="expense" subtitle={selectedPeriod.label} />
                    <SummaryCard title="Investido" value={results.pInvested} type="positive" subtitle={selectedPeriod.label} />
-                   <SummaryCard title="Saldo Final" value={results.pBalance} type={results.pBalance >= 0 ? 'positive' : 'negative'} subtitle={selectedPeriod.label} />
+                   <SummaryCard title="Saldo Final" value={results.pBalance} type="balance" subtitle={selectedPeriod.label} />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -620,25 +641,36 @@ const App: React.FC = () => {
                       <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Eficiência do Período</h3>
                       <div className="w-full aspect-square relative max-w-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={15} data={[{ name: 'Eficiência', value: results.savingsRate, fill: results.savingsRate >= 20 ? '#10b981' : results.savingsRate >= 0 ? '#6366f1' : '#ef4444' }]} startAngle={180} endAngle={0}>
+                          <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={15} data={[{ name: 'Eficiência', value: results.savingsRate, fill: '#6366f1' }]} startAngle={180} endAngle={0}>
                             <RadialBar background dataKey="value" cornerRadius={10} />
                           </RadialBarChart>
                         </ResponsiveContainer>
                         <div className="absolute top-[45%] left-1/2 -translate-x-1/2 text-center">
-                          <p className="text-5xl font-black text-slate-900 dark:text-white leading-none">{results.savingsRate}%</p>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Taxa de Poupança</p>
+                          <p className="text-5xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{results.savingsRate}%</p>
+                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-2">Taxa de Poupança</p>
                         </div>
                       </div>
                    </div>
 
                    <div className="lg:col-span-2 bg-white dark:bg-darkCard p-8 rounded-[3rem] border border-slate-200 dark:border-darkBorder shadow-sm flex flex-col">
-                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center"><BarChart3 size={18} className="mr-3 text-indigo-500" />Fluxo: {selectedPeriod.label}</h3>
+                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center"><BarChart3 size={18} className="mr-3 text-indigo-500" />Fluxo de Caixa: {selectedPeriod.label}</h3>
                       <div className="w-full flex-grow min-h-[250px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={results.periodResults}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                            <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#1e293b" : "#f1f5f9"} />
+                            <XAxis dataKey="shortMonth" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: isDarkMode ? '#94a3b8' : '#64748b'}} />
+                            <Tooltip 
+                              cursor={{fill: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'}}
+                              contentStyle={{ borderRadius: '1.2rem', border: 'none', backgroundColor: isDarkMode ? '#0f172a' : '#fff', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.15)', padding: '12px' }}
+                              itemStyle={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                              formatter={(val: number, name: string) => {
+                                const colorMap: any = { 'Renda': '#10b981', 'Despesa': '#f43f5e' };
+                                return [
+                                  <span style={{ color: colorMap[name], fontWeight: 'bold' }}>{formatCurrency(val)}</span>, 
+                                  <span style={{ color: colorMap[name] }}>{name}</span>
+                                ];
+                              }} 
+                            />
                             <Bar name="Renda" dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} />
                             <Bar name="Despesa" dataKey="expense" fill="#f43f5e" radius={[4, 4, 0, 0]} />
                           </BarChart>
@@ -724,7 +756,7 @@ const App: React.FC = () => {
                       <div className="space-y-6">
                         <div>
                           <p className="text-[11px] text-slate-500 uppercase font-black tracking-widest mb-1">Patrimônio Gerado</p>
-                          <p className="text-4xl font-black text-emerald-400">{formatCurrency(results.annualBalance)}</p>
+                          <p className="text-4xl font-black text-indigo-400">{formatCurrency(results.annualBalance)}</p>
                         </div>
                         <div>
                           <p className="text-[11px] text-slate-500 uppercase font-black tracking-widest mb-1">Taxa Média de Poupança</p>
@@ -804,27 +836,33 @@ const App: React.FC = () => {
 
           <ChatBot financialData={state} />
 
-          <nav className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-darkCard/90 backdrop-blur-xl border-t border-slate-200 dark:border-darkBorder flex items-center justify-around h-20 px-4 lg:hidden z-40">
-            <button onClick={() => setActiveTab('inputs')} className={`flex flex-col items-center space-y-1 transition-all ${activeTab === 'inputs' ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-              <div className={`p-2 rounded-xl ${activeTab === 'inputs' ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}><PlusCircle size={22} /></div>
-              <span className="text-[9px] font-black uppercase tracking-widest">Lançar</span>
-            </button>
-            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center space-y-1 transition-all ${activeTab === 'dashboard' ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-              <div className={`p-2 rounded-xl ${activeTab === 'dashboard' ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}><LayoutDashboard size={22} /></div>
-              <span className="text-[9px] font-black uppercase tracking-widest">Painel</span>
-            </button>
-            <button onClick={() => setActiveTab('annual')} className={`flex flex-col items-center space-y-1 transition-all ${activeTab === 'annual' ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-              <div className={`p-2 rounded-xl ${activeTab === 'annual' ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}><BarChart3 size={22} /></div>
-              <span className="text-[9px] font-black uppercase tracking-widest">Relatórios</span>
-            </button>
-            <button onClick={() => setActiveTab('strategy')} className={`flex flex-col items-center space-y-1 transition-all ${activeTab === 'strategy' ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-              <div className={`p-2 rounded-xl ${activeTab === 'strategy' ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}><BrainCircuit size={22} /></div>
-              <span className="text-[9px] font-black uppercase tracking-widest">Estratégia</span>
-            </button>
-            <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center space-y-1 transition-all ${activeTab === 'profile' ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-              <div className={`p-2 rounded-xl ${activeTab === 'profile' ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}><User size={22} /></div>
-              <span className="text-[9px] font-black uppercase tracking-widest">Perfil</span>
-            </button>
+          <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-darkCard/95 backdrop-blur-2xl border-t border-slate-200 dark:border-darkBorder h-20 px-2 lg:hidden z-40 overflow-x-auto scrollbar-hide select-none">
+            <div className="flex items-center justify-start min-w-max h-full px-4 space-x-2 mx-auto sm:justify-center">
+              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'dashboard' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <div className={`p-1.5 transition-transform ${activeTab === 'dashboard' ? 'scale-110' : ''}`}><LayoutDashboard size={22} /></div>
+                <span className="text-[9px] font-black uppercase tracking-widest">Painel</span>
+              </button>
+              
+              <button onClick={() => setActiveTab('inputs')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'inputs' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <div className={`p-1.5 transition-transform ${activeTab === 'inputs' ? 'scale-110' : ''}`}><PlusCircle size={22} /></div>
+                <span className="text-[9px] font-black uppercase tracking-widest">Lançar</span>
+              </button>
+
+              <button onClick={() => setActiveTab('annual')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'annual' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <div className={`p-1.5 transition-transform ${activeTab === 'annual' ? 'scale-110' : ''}`}><BarChart3 size={22} /></div>
+                <span className="text-[9px] font-black uppercase tracking-widest">Relatórios</span>
+              </button>
+
+              <button onClick={() => setActiveTab('strategy')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'strategy' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <div className={`p-1.5 transition-transform ${activeTab === 'strategy' ? 'scale-110' : ''}`}><BrainCircuit size={22} /></div>
+                <span className="text-[9px] font-black uppercase tracking-widest">Estratégia</span>
+              </button>
+
+              <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center justify-center space-y-1 transition-all flex-shrink-0 min-w-[76px] rounded-2xl py-1 ${activeTab === 'profile' ? 'text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-slate-400'}`}>
+                <div className={`p-1.5 transition-transform ${activeTab === 'profile' ? 'scale-110' : ''}`}><User size={22} /></div>
+                <span className="text-[9px] font-black uppercase tracking-widest">Perfil</span>
+              </button>
+            </div>
           </nav>
         </>
       )}

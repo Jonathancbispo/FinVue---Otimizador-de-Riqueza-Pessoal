@@ -59,10 +59,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
         
         if (signUpError) throw signUpError;
         
-        setSuccessMsg('Conta criada com sucesso! Verifique seu e-mail para confirmar o cadastro antes de acessar.');
+        setSuccessMsg('Conta criada com sucesso! Verifique seu e-mail para confirmar o cadastro.');
         setIsRegistering(false);
         setPassword('');
       } else {
+        // Se rememberMe for true, o Supabase já lida com persistência no localStorage por padrão,
+        // mas vamos garantir o salvamento do email para o campo input.
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -71,7 +73,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
         if (signInError) throw signInError;
         
         if (data.session) {
-          // Lógica de Lembrar de mim
           if (rememberMe) {
             localStorage.setItem('finvue_remembered_email', email);
           } else {
@@ -83,18 +84,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
     } catch (err: any) {
       let msg = err.message || 'Ocorreu um erro inesperado.';
       
-      // Tradução amigável para erro de credenciais
       if (msg === 'Invalid login credentials') {
-        msg = 'E-mail ou senha incorretos. Verifique seus dados ou crie uma conta se for seu primeiro acesso.';
+        msg = 'E-mail ou senha incorretos. Verifique seus dados ou crie uma conta.';
       } else if (msg.includes('Email not confirmed')) {
-        msg = 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada (ou spam).';
+        msg = 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada.';
       } else if (msg.includes('User already registered')) {
         msg = 'Este e-mail já está cadastrado. Tente fazer login.';
       }
 
       setError({ 
         message: msg, 
-        isAuthError: !msg.includes('não está habilitado') 
+        isAuthError: true 
       });
     } finally {
       setIsLoading(false);
@@ -123,24 +123,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
             </p>
           </div>
 
-          {/* Mensagens de Erro */}
           {error && (
-            <div className={`mb-6 p-4 rounded-2xl flex items-start space-x-3 text-xs font-bold border transition-all animate-in fade-in slide-in-from-top-2 ${
-              error.isConfigError 
-                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-400' 
-                : 'bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800 text-rose-600 dark:text-rose-400'
-            }`}>
-              {error.isConfigError ? <Settings className="shrink-0 mt-0.5" size={16} /> : <AlertCircle className="shrink-0 mt-0.5" size={16} />}
-              <div className="flex-1">
-                <p className="leading-relaxed">{error.message}</p>
-                {error.isConfigError && (
-                  <p className="mt-1 font-medium opacity-80 uppercase text-[9px]">Ação necessária no painel Supabase</p>
-                )}
-              </div>
+            <div className="mb-6 p-4 rounded-2xl flex items-start space-x-3 text-xs font-bold border bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800 text-rose-600 dark:text-rose-400 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="shrink-0 mt-0.5" size={16} />
+              <p className="leading-relaxed">{error.message}</p>
             </div>
           )}
 
-          {/* Mensagens de Sucesso */}
           {successMsg && (
             <div className="mb-6 p-4 rounded-2xl flex items-start space-x-3 text-xs font-bold bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 animate-in zoom-in-95">
               <CheckCircle2 className="shrink-0 mt-0.5" size={16} />
@@ -176,7 +165,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors p-1"
-                  title={showPassword ? "Ocultar senha" : "Revelar senha"}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -223,17 +211,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, isDarkMode }) => {
               {isRegistering ? 'Entrar agora' : 'Cadastre-se grátis'}
             </button>
           </p>
-        </div>
-
-        <div className="mt-8 flex items-center justify-center space-x-6 opacity-60">
-          <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <Fingerprint size={14} />
-            <span>Biometria Ativa</span>
-          </div>
-          <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
-          <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <span>Conexão SSL</span>
-          </div>
         </div>
       </div>
     </div>
