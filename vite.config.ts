@@ -9,6 +9,6 @@ export default defineConfig({
     sourcemap: false
   },
   define: {
-    'process.env': process.env
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
   }
 });
